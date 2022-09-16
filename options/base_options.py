@@ -106,7 +106,7 @@ class BaseOptions():
         parser.add_argument('--test_every', type=int, default=1000)
         parser.add_argument('--save_epoch_freq', type=int, default=1)
         parser.add_argument('--calc_metrics', type=str2bool, default=False)
-        parser.add_argument('--save_imgs', type=str2bool, default=False)
+        parser.add_argument('--save_imgs', type=str2bool, default=True)
         parser.add_argument('--visual_full_imgs', type=str2bool, default=False)
         parser.add_argument('--self_ensemble', action='store_true', help='use self-ensemble method for test')
         parser.add_argument('--split', type=str, default='train')

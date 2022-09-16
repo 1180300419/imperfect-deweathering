@@ -18,7 +18,8 @@ class GTRAINDataset(BaseDataset):
         if self.root == '':
             rootlist = [
                 '/hdd1/lxh/derain/dataset/GT-Rain/',
-                '/data/wrh/lxh/derain/dataset/GT-Rain'
+                '/data/wrh/lxh/derain/dataset/GT-Rain',
+                '/home/user/files/data_set/GT-Rain'
             ]
             for root in rootlist:
                 if os.path.isdir(root):
@@ -62,7 +63,7 @@ class GTRAINDataset(BaseDataset):
     def _getitem_trian(self, index):
 
         # rain mix 
-        rainy_img = self.rainy_imgs[index]
+        rainy_img = self.rainy_imgs[index]  # C * H * W
         clean_img = self.clean_imgs[index]
         rainy_img, clean_img = rain_aug(rainy_img, clean_img, self.rain_mask_dir, zoom_min=self.zoom_min, zoom_max=self.zoom_max)
 
@@ -74,17 +75,17 @@ class GTRAINDataset(BaseDataset):
             clean_img = gen_rotate_image(clean_img, angle)
 
         # reflect pad and random cropping to ensure the right image size for training
-        h,w = rainy_img.shape[:2]
-
+        h,w = rainy_img.shape[-2:]
         rainy_img = np.float32(rainy_img / 255.)
         clean_img = np.float32(clean_img / 255.)
-
+       
         # reflect padding
         padw = self.patch_size - w if w < self.patch_size else 0
         padh = self.patch_size - h if h < self.patch_size else 0
         if padw != 0 or padh != 0:
-            rainy_img = np.pad(rainy_img, ((0, 0), (0, padw), (0, padh)), mode='reflect')
-            clean_img = np.pad(clean_img, ((0, 0), (0, padw), (0, padh)), mode='reflect')
+            rainy_img = np.pad(rainy_img, ((0, 0), (0, padh), (0, padw)), mode='reflect')
+            clean_img = np.pad(clean_img, ((0, 0), (0, padh), (0, padw)), mode='reflect')
+
         # random cropping
         rainy_img, clean_img = self._crop_patch(rainy_img, clean_img)
         # random flip
@@ -99,7 +100,7 @@ class GTRAINDataset(BaseDataset):
     def _getitem_val(self, index):
         rainy_img = self.rainy_imgs[index]
         clean_img = self.clean_imgs[index]
-        h,w = rainy_img.shape[:2]
+        h,w = rainy_img.shape[-2:]
 
         rainy_img = np.float32(rainy_img / 255.)
         clean_img = np.float32(clean_img / 255.)
@@ -108,8 +109,8 @@ class GTRAINDataset(BaseDataset):
         padw = self.patch_size - w if w < self.patch_size else 0
         padh = self.patch_size - h if h < self.patch_size else 0
         if padw != 0 or padh != 0:
-            rainy_img = np.pad(rainy_img, ((0, 0), (0, padw), (0, padh)), mode='reflect')
-            clean_img = np.pad(clean_img, ((0, 0), (0, padw), (0, padh)), mode='reflect')
+            rainy_img = np.pad(rainy_img, ((0, 0), (0, padh), (0, padw)), mode='reflect')
+            clean_img = np.pad(clean_img, ((0, 0), (0, padh), (0, padw)), mode='reflect')
 
         rainy_img, clean_img = self._crop_center(rainy_img, clean_img)
         return {
@@ -121,7 +122,7 @@ class GTRAINDataset(BaseDataset):
     def _getitem_test(self, index):
         rainy_img = self.rainy_imgs[index]
         clean_img = self.clean_imgs[index]
-        h,w = rainy_img.shape[:2]
+        h,w = rainy_img.shape[-2:]
 
         rainy_img = np.float32(rainy_img / 255.)
         clean_img = np.float32(clean_img / 255.)

@@ -6,13 +6,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 10:40:30
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-09-16 13:33:36
+ # @LastEditTime: 2022-09-16 13:54:16
 ### 
 
 echo "Start to train the model..."
 
-name="unet"
-dataroot='/home/user/files/data_set/GT-Rain'
+name="resunet"
 
 build_dir="../checkpoints/"$name
 
@@ -25,12 +24,11 @@ LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
 
 python train.py \
         --name $name\
-        --dataroot $dataroot\
         --dataset_name GTRAIN\
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
-        --model  unet\
+        --model  resunet\
         --niter 20\
         --lr_policy 'warmup'\
         --lr 2e-4\
@@ -39,7 +37,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 0,1\
+        --gpu_ids 6\
         -j 4  | tee $LOG  
 
 

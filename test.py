@@ -1,3 +1,11 @@
+'''
+Descripttion: 
+version: 
+Author: Liu Xiaohui
+Date: 2022-09-16 12:39:08
+LastEditors: Liu Xiaohui
+LastEditTime: 2022-09-16 13:28:39
+'''
 import os
 import torch
 from options.test_options import TestOptions
@@ -16,7 +24,6 @@ import cv2
 
 if __name__ == '__main__':
     opt = TestOptions().parse()
-
     if not isinstance(opt.load_iter, list):
         load_iters = [opt.load_iter]
     else:
@@ -27,9 +34,8 @@ if __name__ == '__main__':
     else:
         dataset_names = deepcopy(opt.dataset_name)
     datasets = odict()
-    split = opt.split
     for dataset_name in dataset_names:
-        dataset = create_dataset(dataset_name, split, opt)
+        dataset = create_dataset(dataset_name, 'test', opt)
         print(len(dataset))
         datasets[dataset_name] = tqdm(dataset)
 
@@ -65,10 +71,10 @@ if __name__ == '__main__':
                 if opt.calc_metrics:
                     psnr[i] = calc_psnr(res['derained_img'], res['clean_img'], range=255.)
                 if opt.save_imgs:
-                    save_dir_rgb = os.path.join('../checkpoints', self.opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
-                    os.makedirs(save_dir_rgb. exist_ok=True)
-                    out_img = res['derained_img']
-                    cv2.imwrite(save_dir_rgb, cv2.cvtColor(np.array(out_img[0].cpu()).astype(np.uint8), cv2.COLOR_RGB2BGR))
+                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
+                    os.makedirs(save_dir_rgb, exist_ok=True)
+                    out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
 
 
             avg_psnr_rgb = '%.2f'%np.mean(psnr)

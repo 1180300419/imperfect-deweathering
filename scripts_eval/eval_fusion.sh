@@ -3,7 +3,7 @@ echo "Start to test the model...."
 
 name="fusion_64_24_middle_blk_3e-5"
 # name="rcan_rawl1rgbl10.05swd"
-dataroot='/hdd1/MIPI2022/Fusion/dataset/'
+dataroot='/home'
 device="7"
 
 python test.py \
