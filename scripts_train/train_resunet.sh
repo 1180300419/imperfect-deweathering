@@ -37,7 +37,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 6\
+        --gpu_ids 5\
         -j 4  | tee $LOG  
 
 

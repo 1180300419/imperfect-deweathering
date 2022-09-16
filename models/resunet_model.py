@@ -255,5 +255,7 @@ class UNET(nn.Module):
 	def forward(self, x, res=True):
 		out_img = self.resnet(x)
 		if res:
-			out_img += x
+			out = x + out_img
+			out_img = torch.clip(out, -1, 1)
 		return out_img
+		

@@ -11,8 +11,7 @@
 
 echo "Start to train the model..."
 
-name="unet"
-dataroot='/home/user/files/data_set/GT-Rain'
+name="unet-hist"
 
 build_dir="../checkpoints/"$name
 
@@ -24,14 +23,14 @@ LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
 
 
 python train.py \
-        --name $name\
-        --dataroot $dataroot\
         --dataset_name GTRAIN\
+        --name $name\
+        --dataroot ''\
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
         --model  unet\
-        --niter 20\
+        --niter 40\
         --lr_policy 'warmup'\
         --lr 2e-4\
         --min_lr 1e-6\
@@ -39,7 +38,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 0,1\
+        --gpu_ids 4\
         -j 4  | tee $LOG  
 
 
