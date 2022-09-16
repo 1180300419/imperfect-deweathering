@@ -9,7 +9,7 @@ from . import BaseModel as BaseModel
 from . import losses as L
 
 
-class UNETModel(BaseModel):
+class RESUNETModel(BaseModel):
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
 		parser.add_argument('--ngf', type=int, default=64)
@@ -21,7 +21,7 @@ class UNETModel(BaseModel):
 		return parser
 
 	def __init__(self, opt):
-		super(UNETModel, self).__init__(opt)
+		super(RESUNETModel, self).__init__(opt)
 
 		self.opt = opt
 		self.loss_names = [ 'UNET_L1', 'UNET_MSSIM', 'Total']
