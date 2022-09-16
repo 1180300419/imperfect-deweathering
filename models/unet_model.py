@@ -252,6 +252,8 @@ class UNET(nn.Module):
 			padding_type='reflect',
 			upsample_mode=upsample_mode)
 
-	def forward(self, x):
+	def forward(self, x, res=False):
 		out_img = self.resnet(x)
+		if res:
+			out_img += x
 		return out_img
