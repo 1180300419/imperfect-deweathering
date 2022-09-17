@@ -46,7 +46,7 @@ if __name__ == '__main__':
         model = create_model(opt)
         model.setup(opt)
         model.eval()
-
+        print('before reloop')
         for dataset_name in dataset_names:
             opt.dataset_name = dataset_name
             tqdm_val = datasets[dataset_name]
