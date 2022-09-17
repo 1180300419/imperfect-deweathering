@@ -41,8 +41,8 @@ def create_model(opt):
         >>> from models import create_model
         >>> model = create_model(opt)
     """
-    print(opt.model)
-    exit(0)
+    # print(opt.model)
+    # exit(0)
     model = find_model_using_name(opt.model)
     instance = model(opt)
     print("model [%s] was created" % type(instance).__name__)
