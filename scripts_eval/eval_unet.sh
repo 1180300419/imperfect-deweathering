@@ -9,7 +9,7 @@
 ### 
 echo "Start to test the model...."
 
-name="resunet"
+name="unet"
 device="0"
 
 python test.py \

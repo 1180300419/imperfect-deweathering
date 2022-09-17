@@ -13,7 +13,9 @@ from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
 from tqdm import tqdm
-from util.util import calc_psnr as calc_psnr
+from skimage.metrics import peak_signal_noise_ratio as calc_psnr
+from skimage.metrics import structural_similarity as calc_ssim
+from util.util import calc_lpips 
 import time
 import numpy as np
 from collections import OrderedDict as odict
@@ -56,6 +58,7 @@ if __name__ == '__main__':
             tqdm_val.reset()
 
             psnr = [0.0] * dataset_size_test
+            ssim = [0.0] * dataset_size_test
             time_val = 0
             print(dataset_size_test)
             for i, data in enumerate(tqdm_val):
@@ -69,7 +72,8 @@ if __name__ == '__main__':
                 res = model.get_current_visuals()
 
                 if opt.calc_metrics:
-                    psnr[i] = calc_psnr(res['derained_img'], res['clean_img'], range=255.)
+                    psnr[i] = calc_psnr(res['clean_img'], res['derained_img'], data_range=255.)
+                    ssim[i] = calc_ssim(res['clean_img'], res['derained_img'], data_range=255.)
                 if opt.save_imgs:
                     save_dir_rgb = os.path.join('../checkpoints', opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
                     os.makedirs(save_dir_rgb, exist_ok=True)
@@ -78,8 +82,9 @@ if __name__ == '__main__':
 
 
             avg_psnr_rgb = '%.2f'%np.mean(psnr)
+            avg_ssim_rgb = '%.2f'%np.mean(ssim)
 
-            print('Time: %.3f s AVG Time: %.3f ms PSNR: %s \n' % (time_val, time_val/dataset_size_test*1000, avg_psnr_rgb))
+            print('Time: %.3f s AVG Time: %.3f ms PSNR: %s SSIM: %s \n' % (time_val, time_val/dataset_size_test*1000, avg_psnr_rgb, avg_ssim_rgb))
 
     for dataset in datasets:
         datasets[dataset].close()

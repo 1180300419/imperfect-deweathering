@@ -27,11 +27,17 @@ class UNETModel(BaseModel):
 		super(UNETModel, self).__init__(opt)
 
 		self.opt = opt
-		self.loss_names = [ 'UNET_L1', 'UNET_MSSIM', 'Total']
+
+		self.loss_names = ['Total']
+		if self.opt.l1_loss_weight > 0:
+			self.loss_names.append('UNET_L1')
+		if self.opt.ssim_loss_weight > 0:
+			self.loss_names.append('UNET_MSSIM')
 		if opt.vgg19_loss_weight > 0:
 			self.loss_names.append('UNET_VGG19')
 		if opt.hist_matched_weight > 0:
 			self.loss_names.append('UNET_HISTED')
+
 		self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
 		self.model_names = ['UNET']
 		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
@@ -93,12 +99,14 @@ class UNETModel(BaseModel):
 
 		if self.opt.hist_matched_weight > 0:
 			for m in range(self.derained_img.shape[0]):
-				derained = self.derained_img[m].detach().cpu().permute(1, 2, 0).numpy()
-				clean = self.clean_img[m].detach().cpu().permute(1, 2, 0).numpy()
-				self.clean_img[m] = torch.from_numpy(
-					exposure.match_histograms(clean, derained, multichannel=True)).permute(2, 0, 1).to(self.device)
+				derained = self.derained_img[m].detach().cpu().numpy()
+				clean = self.clean_img[m].detach().cpu().numpy()
+				img_np = exposure.match_histograms(clean, derained, multichannel=True)
+				print(img_np)
+				self.clean_img[m] = torch.from_numpy(img_np).to(self.device)
+				
 			self.loss_UNET_HISTED = self.criterionL1(self.derained_img, self.clean_img).mean()
-			self.loss_Total += self.hist_matched_weight * self.loss_UNET_HISTED
+			self.loss_Total += self.opt.hist_matched_weight * self.loss_UNET_HISTED
 			
 		self.loss_Total.backward()
 
