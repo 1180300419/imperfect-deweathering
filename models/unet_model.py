@@ -7,6 +7,7 @@ import functools
 from . import networks as N
 from . import BaseModel as BaseModel
 from . import losses as L
+from skimage import exposure
 
 
 class UNETModel(BaseModel):
@@ -16,15 +17,27 @@ class UNETModel(BaseModel):
 		parser.add_argument('--n_blocks', type=int, default=9)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
-		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
+		parser.add_argument('--l1_loss_weight', type=float, default=0.0)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
+		parser.add_argument('--vgg19_loss_weight', type=float, default=0.0)
+		parser.add_argument('--hist_matched_weight', type=float, default=0.1)
 		return parser
 
 	def __init__(self, opt):
 		super(UNETModel, self).__init__(opt)
 
 		self.opt = opt
-		self.loss_names = [ 'UNET_L1', 'UNET_MSSIM', 'Total']
+
+		self.loss_names = ['Total']
+		if self.opt.l1_loss_weight > 0:
+			self.loss_names.append('UNET_L1')
+		if self.opt.ssim_loss_weight > 0:
+			self.loss_names.append('UNET_MSSIM')
+		if opt.vgg19_loss_weight > 0:
+			self.loss_names.append('UNET_VGG19')
+		if opt.hist_matched_weight > 0:
+			self.loss_names.append('UNET_HISTED')
+
 		self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
 		self.model_names = ['UNET']
 		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
@@ -57,6 +70,8 @@ class UNETModel(BaseModel):
 
 			self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
 			self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
+			if opt.vgg19_loss_weight > 0:
+				self.critrionVGG19 = N.init_net(L.VGGLoss(), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
@@ -67,13 +82,32 @@ class UNETModel(BaseModel):
 		self.derained_img = self.netUNET(self.rainy_img)
 
 	def backward(self):
-		self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() ## 
-		self.loss_UNET_MSSIM = self.criterionMSSIM(self.derained_img, self.clean_img).mean()
-		# print(self.loss_UNET_L1.data)
-		# print(self.loss_UNET_MSSIM.data)
-		# exit(0)
-		self.loss_Total = self.loss_UNET_L1 * self.opt.l1_loss_weight + \
-							self.loss_UNET_MSSIM * self.opt.ssim_loss_weight
+
+		self.loss_Total = 0
+
+		if self.opt.ssim_loss_weight > 0:
+			self.loss_UNET_MSSIM = self.criterionMSSIM(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.ssim_loss_weight * self.loss_UNET_MSSIM
+
+		if self.opt.l1_loss_weight > 0:
+			self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() ## 
+			self.loss_Total += self.opt.l1_loss_weight * self.loss_UNET_L1
+
+		if self.opt.vgg19_loss_weight > 0:
+			self.loss_UNET_VGG19 = self.critrionVGG19(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.vgg19_loss_weight * self.loss_UNET_VGG19
+
+		if self.opt.hist_matched_weight > 0:
+			for m in range(self.derained_img.shape[0]):
+				derained = self.derained_img[m].detach().cpu().numpy()
+				clean = self.clean_img[m].detach().cpu().numpy()
+				img_np = exposure.match_histograms(clean, derained, multichannel=True)
+				print(img_np)
+				self.clean_img[m] = torch.from_numpy(img_np).to(self.device)
+				
+			self.loss_UNET_HISTED = self.criterionL1(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.hist_matched_weight * self.loss_UNET_HISTED
+			
 		self.loss_Total.backward()
 
 	def optimize_parameters(self):

@@ -19,7 +19,10 @@ import random
 import torch.multiprocessing as mp
 import torch.nn as nn
 import lpips
-from util.util import calc_psnr as calc_psnr, calc_ssim, calc_lpips
+
+from skimage.metrics import peak_signal_noise_ratio as calc_psnr
+from skimage.metrics import structural_similarity as calc_ssim
+from util.util import calc_lpips 
 from collections import OrderedDict
 
 cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
@@ -110,8 +113,8 @@ if __name__ == '__main__':
 					model.test()
 				time_val += time.time() - time_val_start
 				res = model.get_current_visuals()
-				psnr[i] = calc_psnr(res['derained_img'], res['clean_img'], range=255.)
-				ssim[i] = 0 # calc_ssim(res['derained_img'], res['clean_img'])
+				psnr[i] = calc_psnr(res['clean_img'], res['derained_img'], data_range=255.)
+				ssim[i] = calc_ssim( res['clean_img'], res['derained_img'], data_range=255.)
 				lpipses[i] = 0 # calc_lpips(res['derained_img'], res['clean_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
 			visualizer.print_psnr(epoch, opt.niter + opt.niter_decay, time_val, np.mean(psnr))
 			visualizer.print_ssim(epoch, opt.niter + opt.niter_decay, time_val, np.mean(ssim))
