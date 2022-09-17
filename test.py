@@ -15,7 +15,6 @@ from util.visualizer import Visualizer
 from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio as calc_psnr
 from skimage.metrics import structural_similarity as calc_ssim
-from util.util import calc_lpips 
 import time
 import numpy as np
 from collections import OrderedDict as odict
@@ -43,6 +42,7 @@ if __name__ == '__main__':
 
     for load_iter in load_iters:
         opt.load_iter = load_iter
+        # print('before ')
         model = create_model(opt)
         model.setup(opt)
         model.eval()
@@ -60,7 +60,7 @@ if __name__ == '__main__':
             psnr = [0.0] * dataset_size_test
             ssim = [0.0] * dataset_size_test
             time_val = 0
-            print(dataset_size_test)
+            # print(dataset_size_test)
             for i, data in enumerate(tqdm_val):
                 torch.cuda.empty_cache()
                 model.set_input(data)
