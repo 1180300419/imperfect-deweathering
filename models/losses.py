@@ -782,3 +782,15 @@ def hist_matching(src, ref):
 	# and then perform histogram matching itself
 	matched = exposure.match_histograms(src, ref, multichannel=True)
 	return matched
+
+
+class L1_Charbonnier_loss(torch.nn.Module):
+	"""L1 Charbonnierloss."""
+	def __init__(self):
+		super(L1_Charbonnier_loss, self).__init__()
+		self.eps = 1e-6
+
+	def forward(self, X, Y):
+		diff = torch.add(X, -Y)
+		loss = torch.sqrt(diff * diff + self.eps)
+		return loss

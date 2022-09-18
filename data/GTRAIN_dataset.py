@@ -126,7 +126,6 @@ class GTRAINDataset(BaseDataset):
 
         rainy_img = np.float32(rainy_img / 255.)
         clean_img = np.float32(clean_img / 255.)
-
         rainy_img = rainy_img[..., :h - h % 4, :w - w % 4]
         clean_img = clean_img[..., :h - h % 4, :w - w % 4]
 

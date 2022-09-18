@@ -4,7 +4,7 @@ version:
 Author: Liu Xiaohui
 Date: 2022-09-16 12:39:08
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-09-16 13:28:39
+LastEditTime: 2022-09-17 17:03:56
 '''
 import os
 import torch
@@ -46,7 +46,7 @@ if __name__ == '__main__':
         model = create_model(opt)
         model.setup(opt)
         model.eval()
-        print('before reloop')
+        # print('before reloop')
         for dataset_name in dataset_names:
             opt.dataset_name = dataset_name
             tqdm_val = datasets[dataset_name]
@@ -72,8 +72,10 @@ if __name__ == '__main__':
                 res = model.get_current_visuals()
 
                 if opt.calc_metrics:
-                    psnr[i] = calc_psnr(res['clean_img'], res['derained_img'], data_range=255.)
-                    ssim[i] = calc_ssim(res['clean_img'], res['derained_img'], data_range=255.)
+                    derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
+                    clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
+                    psnr[i] = calc_psnr(clean, derained, data_range=1.)
+                    ssim[i] = calc_ssim(clean, derained, multichannel=True)
                 if opt.save_imgs:
                     save_dir_rgb = os.path.join('../checkpoints', opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
                     os.makedirs(save_dir_rgb, exist_ok=True)
@@ -82,7 +84,7 @@ if __name__ == '__main__':
 
 
             avg_psnr_rgb = '%.2f'%np.mean(psnr)
-            avg_ssim_rgb = '%.2f'%np.mean(ssim)
+            avg_ssim_rgb = '%.4f'%np.mean(ssim)
 
             print('Time: %.3f s AVG Time: %.3f ms PSNR: %s SSIM: %s \n' % (time_val, time_val/dataset_size_test*1000, avg_psnr_rgb, avg_ssim_rgb))
 
