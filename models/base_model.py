@@ -97,7 +97,7 @@ class BaseModel(ABC):
             if self.opt.data_section == '-1-1':
                 visual_ret[name] = torch.clamp(
                     (getattr(self, name).detach() * 0.5 + 0.5) * 255, 0, 255).round()
-            elif self.data_section == '0-1':
+            elif self.opt.data_section == '0-1':
                 visual_ret[name] = torch.clamp(
                     getattr(self, name).detach() * 255, 0, 255).round()
         return visual_ret

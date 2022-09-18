@@ -6,12 +6,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 10:40:30
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-09-16 13:54:16
+ # @LastEditTime: 2022-09-18 13:34:43
 ### 
 
 echo "Start to train the model..."
 
-name="resunet"
+name="resunet-data-01"
 
 build_dir="../checkpoints/"$name
 
@@ -23,8 +23,9 @@ LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
 
 
 python train.py \
+        --data_section '0-1'\
         --name $name\
-        --dataset_name GTRAIN\
+        --dataset_name GTRAIN01\
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
@@ -37,7 +38,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 5\
+        --gpu_ids 0,1\
         -j 4  | tee $LOG  
 
 

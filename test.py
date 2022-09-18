@@ -4,7 +4,7 @@ version:
 Author: Liu Xiaohui
 Date: 2022-09-16 12:39:08
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-09-18 11:11:08
+LastEditTime: 2022-09-18 15:27:03
 '''
 import os
 import torch
@@ -72,10 +72,10 @@ if __name__ == '__main__':
                 res = model.get_current_visuals()
 
                 if opt.calc_metrics:
-                    derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8) / 255.
-                    clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8) / 255.
+                    derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
+                    clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
                     psnr[i] = calc_psnr(clean, derained, data_range=1.)
-                    ssim[i] = calc_ssim(clean, derained, channel_aixs=0)
+                    ssim[i] = calc_ssim(clean, derained, multichannel=True)
                 if opt.save_imgs:
                     save_dir_rgb = os.path.join('../checkpoints', opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
                     os.makedirs(save_dir_rgb, exist_ok=True)
