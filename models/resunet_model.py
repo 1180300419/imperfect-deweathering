@@ -17,15 +17,22 @@ class RESUNETModel(BaseModel):
 		parser.add_argument('--n_blocks', type=int, default=9)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
-		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
+		parser.add_argument('--l1_loss_weight', type=float, default=0.0)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
+		parser.add_argument('--charbonnier_loss_weight', type=float, default=0.1)
 		return parser
 
 	def __init__(self, opt):
 		super(RESUNETModel, self).__init__(opt)
 
 		self.opt = opt
-		self.loss_names = [ 'UNET_L1', 'UNET_MSSIM', 'Total']
+		self.loss_names = ['Total']
+		if self.opt.l1_loss_weight > 0:
+			self.loss_names.append('UNET_L1')
+		if self.opt.ssim_loss_weight > 0:
+			self.loss_names.append('UNET_MSSIM')
+		if self.opt.charbonnier_loss_weight > 0:
+			self.loss_names.append('UNET_Charbonnier')
 		self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
 		self.model_names = ['UNET']
 		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
@@ -58,6 +65,7 @@ class RESUNETModel(BaseModel):
 
 			self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
 			self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
+			self.criterionChab = N.init_net(L.L1_Charbonnier_loss(), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
@@ -68,13 +76,20 @@ class RESUNETModel(BaseModel):
 		self.derained_img = self.netUNET(self.rainy_img)
 
 	def backward(self):
-		self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() ## 
-		self.loss_UNET_MSSIM = self.criterionMSSIM(self.derained_img, self.clean_img).mean()
-		# print(self.loss_UNET_L1.data)
-		# print(self.loss_UNET_MSSIM.data)
-		# exit(0)
-		self.loss_Total = self.loss_UNET_L1 * self.opt.l1_loss_weight + \
-							self.loss_UNET_MSSIM * self.opt.ssim_loss_weight
+		self.loss_Total = 0
+
+		if self.opt.ssim_loss_weight > 0:
+			self.loss_UNET_MSSIM = self.criterionMSSIM(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.ssim_loss_weight * self.loss_UNET_MSSIM
+
+		if self.opt.l1_loss_weight > 0:
+			self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() ## 
+			self.loss_Total += self.opt.l1_loss_weight * self.loss_UNET_L1
+		
+		if self.opt.charbonnier_loss_weight > 0:
+			self.loss_UNET_Charbonnier = self.criterionChab(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.charbonnier_loss_weight * self.loss_UNET_Charbonnier
+
 		self.loss_Total.backward()
 
 	def optimize_parameters(self):

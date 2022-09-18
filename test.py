@@ -4,7 +4,7 @@ version:
 Author: Liu Xiaohui
 Date: 2022-09-16 12:39:08
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-09-18 15:27:03
+LastEditTime: 2022-09-18 16:50:29
 '''
 import os
 import torch
@@ -15,16 +15,19 @@ from util.visualizer import Visualizer
 from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio as calc_psnr
 from skimage.metrics import structural_similarity as calc_ssim
+from util.util import calc_lpips 
 import time
 import numpy as np
 from collections import OrderedDict as odict
 from copy import deepcopy
 import struct
 import cv2
+import lpips
 
 
 if __name__ == '__main__':
     opt = TestOptions().parse()
+    loss_fn_alex_1 = lpips.LPIPS(net='alex', version='0.1')
     if not isinstance(opt.load_iter, list):
         load_iters = [opt.load_iter]
     else:
@@ -59,6 +62,7 @@ if __name__ == '__main__':
 
             psnr = [0.0] * dataset_size_test
             ssim = [0.0] * dataset_size_test
+            lpipses = [0.0] * dataset_size_test
             time_val = 0
             # print(dataset_size_test)
             for i, data in enumerate(tqdm_val):
@@ -76,6 +80,8 @@ if __name__ == '__main__':
                     clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
                     psnr[i] = calc_psnr(clean, derained, data_range=1.)
                     ssim[i] = calc_ssim(clean, derained, multichannel=True)
+                    lpipses[i] = calc_lpips(clean, derained, loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
+
                 if opt.save_imgs:
                     save_dir_rgb = os.path.join('../checkpoints', opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
                     os.makedirs(save_dir_rgb, exist_ok=True)
@@ -86,7 +92,7 @@ if __name__ == '__main__':
             avg_psnr_rgb = '%.2f'%np.mean(psnr)
             avg_ssim_rgb = '%.4f'%np.mean(ssim)
 
-            print('Time: %.3f s AVG Time: %.3f ms PSNR: %s SSIM: %s \n' % (time_val, time_val/dataset_size_test*1000, avg_psnr_rgb, avg_ssim_rgb))
+            print('Epoch %d Time: %.3f s AVG Time: %.3f ms PSNR: %s SSIM: %s \n' % (opt.load_iter, time_val, time_val/dataset_size_test*1000, avg_psnr_rgb, avg_ssim_rgb))
 
     for dataset in datasets:
         datasets[dataset].close()
