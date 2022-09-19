@@ -6,12 +6,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 10:40:30
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-09-16 13:33:36
+ # @LastEditTime: 2022-09-18 13:34:43
 ### 
 
 echo "Start to train the model..."
 
-name="baseline"
+name="bigresunet"
 
 build_dir="../checkpoints/"$name
 
@@ -23,13 +23,12 @@ LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
 
 
 python train.py \
-        --dataset_name GTRAIN\
         --name $name\
-        --dataroot ''\
+        --dataset_name GTRAIN\
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
-        --model  unet\
+        --model  bigresunet\
         --niter 40\
         --lr_policy 'warmup'\
         --lr 2e-4\
@@ -38,7 +37,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 2\
+        --gpu_ids 1\
         -j 4  | tee $LOG  
 
 

@@ -9,9 +9,10 @@ from . import BaseModel as BaseModel
 from . import losses as L
 
 
-class RESUNETModel(BaseModel):
+class BIGRESUNETModel(BaseModel):
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
+		parser.add_argument('--data_section', type=str, default='-1-1')
 		parser.add_argument('--ngf', type=int, default=64)
 		parser.add_argument('--n_blocks', type=int, default=9)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
@@ -21,7 +22,7 @@ class RESUNETModel(BaseModel):
 		return parser
 
 	def __init__(self, opt):
-		super(RESUNETModel, self).__init__(opt)
+		super(BIGRESUNETModel, self).__init__(opt)
 
 		self.opt = opt
 		self.loss_names = [ 'UNET_L1', 'UNET_MSSIM', 'Total']
@@ -138,35 +139,35 @@ class ResNetModified(nn.Module):
 				activation_func=activation_func,
 				use_bias=use_bias))
 
-		# Downsample Blocks
-		n_downsampling = 2
+		# # Downsample Blocks
+		# n_downsampling = 2
 		mult = 2 ** 0
 
-		self.downsample_1 = N.Conv2d(
-			in_channels=ngf * mult,
-			out_channels=ngf * mult * 2,
-			kernel_size=3,
-			stride=2,
-			padding_type=padding_type,
-			norm_layer=norm_layer,
-			activation_func=activation_func,
-			use_bias=use_bias)
+		# self.downsample_1 = N.Conv2d(
+		# 	in_channels=ngf * mult,
+		# 	out_channels=ngf * mult * 2,
+		# 	kernel_size=3,
+		# 	stride=2,
+		# 	padding_type=padding_type,
+		# 	norm_layer=norm_layer,
+		# 	activation_func=activation_func,
+		# 	use_bias=use_bias)
 
-		mult = 2 ** 1
+		# mult = 2 ** 1
 
-		self.downsample_2 = N.Conv2d(
-			in_channels=ngf * mult,
-			out_channels=ngf * mult * 2,
-			kernel_size=3,
-			stride=2,
-			padding_type=padding_type,
-			norm_layer=norm_layer,
-			activation_func=activation_func,
-			use_bias=use_bias)
+		# self.downsample_2 = N.Conv2d(
+		# 	in_channels=ngf * mult,
+		# 	out_channels=ngf * mult * 2,
+		# 	kernel_size=3,
+		# 	stride=2,
+		# 	padding_type=padding_type,
+		# 	norm_layer=norm_layer,
+		# 	activation_func=activation_func,
+		# 	use_bias=use_bias)
 
 		# Residual Blocks
 		residual_blocks = []
-		mult = 2 ** n_downsampling
+		# mult = 2 ** n_downsampling
 
 		for i in range(n_blocks): # add ResNet blocks
 			residual_blocks += [
@@ -180,29 +181,29 @@ class ResNetModified(nn.Module):
 		self.residual_blocks = nn.Sequential(*residual_blocks)
 
 		# Upsampling
-		mult = 2 ** (n_downsampling - 0)
+		# mult = 2 ** (n_downsampling - 0)
 
-		self.upsample_2 = N.DecoderBlock(
-			ngf * mult, 
-			int(ngf * mult / 2),
-			int(ngf * mult / 2),
-			use_bias=use_bias,
-			activation_func=activation_func,
-			norm_layer=norm_layer,
-			padding_type=padding_type,
-			upsample_mode=upsample_mode)
+		# self.upsample_2 = N.DecoderBlock(
+		# 	ngf * mult, 
+		# 	int(ngf * mult / 2),
+		# 	int(ngf * mult / 2),
+		# 	use_bias=use_bias,
+		# 	activation_func=activation_func,
+		# 	norm_layer=norm_layer,
+		# 	padding_type=padding_type,
+		# 	upsample_mode=upsample_mode)
 
-		mult = 2 ** (n_downsampling - 1)
+		# mult = 2 ** (n_downsampling - 1)
 
-		self.upsample_1 = N.DecoderBlock(
-			ngf * mult, 
-			int(ngf * mult / 2),
-			int(ngf * mult / 2),
-			use_bias=use_bias,
-			activation_func=activation_func,
-			norm_layer=norm_layer,
-			padding_type=padding_type,
-			upsample_mode=upsample_mode)
+		# self.upsample_1 = N.DecoderBlock(
+		# 	ngf * mult, 
+		# 	int(ngf * mult / 2),
+		# 	int(ngf * mult / 2),
+		# 	use_bias=use_bias,
+		# 	activation_func=activation_func,
+		# 	norm_layer=norm_layer,
+		# 	padding_type=padding_type,
+		# 	upsample_mode=upsample_mode)
 
 		# Output Convolution
 		self.output_conv_naive = nn.Sequential(
@@ -214,16 +215,16 @@ class ResNetModified(nn.Module):
 		"""Standard forward"""
 		# Downsample
 		initial_conv_out  = self.initial_conv(input)
-		downsample_1_out = self.downsample_1(initial_conv_out)
-		downsample_2_out = self.downsample_2(downsample_1_out)
+		# downsample_1_out = self.downsample_1(initial_conv_out)
+		# downsample_2_out = self.downsample_2(downsample_1_out)
 
 		# Residual
-		residual_blocks_out = self.residual_blocks(downsample_2_out)
+		residual_blocks_out = self.residual_blocks(initial_conv_out)
 
 		# Upsample
-		upsample_2_out = self.upsample_2(residual_blocks_out, downsample_1_out)
-		upsample_1_out = self.upsample_1(upsample_2_out, initial_conv_out)
-		final_out = self.output_conv_naive(upsample_1_out)
+		# upsample_2_out = self.upsample_2(residual_blocks_out, downsample_1_out)
+		# upsample_1_out = self.upsample_1(upsample_2_out, initial_conv_out)
+		final_out = self.output_conv_naive(residual_blocks_out)
 
 		# Return multiple final conv results
 		return final_out

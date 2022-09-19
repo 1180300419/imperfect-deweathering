@@ -11,7 +11,7 @@
 
 echo "Start to train the model..."
 
-name="resunet-data-01"
+name="resunet-CX"
 
 build_dir="../checkpoints/"$name
 
@@ -23,9 +23,8 @@ LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
 
 
 python train.py \
-        --data_section '0-1'\
         --name $name\
-        --dataset_name GTRAIN01\
+        --dataset_name GTRAIN\
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
@@ -38,7 +37,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 0,1\
+        --gpu_ids 3\
         -j 4  | tee $LOG  
 
 

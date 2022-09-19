@@ -20,6 +20,7 @@ class RESUNETModel(BaseModel):
 		parser.add_argument('--l1_loss_weight', type=float, default=0.0)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
 		parser.add_argument('--charbonnier_loss_weight', type=float, default=0.1)
+		parser.add_argument('--CX_loss_weight', type=float, default=0.0)
 		return parser
 
 	def __init__(self, opt):
@@ -33,6 +34,9 @@ class RESUNETModel(BaseModel):
 			self.loss_names.append('UNET_MSSIM')
 		if self.opt.charbonnier_loss_weight > 0:
 			self.loss_names.append('UNET_Charbonnier')
+		if self.opt.CX_loss_weight > 0:
+			self.loss_names.append('UNET_CX')
+
 		self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
 		self.model_names = ['UNET']
 		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
@@ -66,6 +70,7 @@ class RESUNETModel(BaseModel):
 			self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
 			self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
 			self.criterionChab = N.init_net(L.L1_Charbonnier_loss(), gpu_ids=opt.gpu_ids)
+			self.criterionCX = N.init_net(L.Contextual_Bilateral_Loss(), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
@@ -89,6 +94,10 @@ class RESUNETModel(BaseModel):
 		if self.opt.charbonnier_loss_weight > 0:
 			self.loss_UNET_Charbonnier = self.criterionChab(self.derained_img, self.clean_img).mean()
 			self.loss_Total += self.opt.charbonnier_loss_weight * self.loss_UNET_Charbonnier
+
+		if self.opt.CX_loss_weight > 0:
+			self.loss_UNET_CX = self.criterionCX(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.CX_loss_weight * self.loss_UNET_CX
 
 		self.loss_Total.backward()
 

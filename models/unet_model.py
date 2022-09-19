@@ -18,10 +18,10 @@ class UNETModel(BaseModel):
 		parser.add_argument('--n_blocks', type=int, default=9)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
-		parser.add_argument('--l1_loss_weight', type=float, default=0.0)
+		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
 		parser.add_argument('--vgg19_loss_weight', type=float, default=0.0)
-		parser.add_argument('--hist_matched_weight', type=float, default=0.1)
+		parser.add_argument('--hist_matched_weight', type=float, default=0.0)
 		return parser
 
 	def __init__(self, opt):

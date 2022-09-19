@@ -59,8 +59,8 @@ def calc_ssim(sr, hr):
 
 
 def calc_lpips(sr, hr, loss_fn_alex_1, device):
-    sr = sr * 2 - 1
-    hr = hr * 2 - 1
+    sr = sr / (255. / 2.) - 1
+    hr = hr / (255. / 2.) - 1
     sr = sr.to(device)
     hr = hr.to(device)
     loss_fn_alex_1 = loss_fn_alex_1.to(device)
