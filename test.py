@@ -76,14 +76,15 @@ if __name__ == '__main__':
                 res = model.get_current_visuals()
 
                 if opt.calc_metrics:
+                    lpipses[i] = calc_lpips(res['clean_img'], res['derained_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
                     derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
                     clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
                     psnr[i] = calc_psnr(clean, derained, data_range=1.)
                     ssim[i] = calc_ssim(clean, derained, multichannel=True)
-                    lpipses[i] = calc_lpips(clean, derained, loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
+                    
 
                 if opt.save_imgs:
-                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'rgb_out', data['file_name'][0].split('-')[0])
+                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'epoch_' + str(opt.load_iter), 'rgb_out', data['file_name'][0][:-17])
                     os.makedirs(save_dir_rgb, exist_ok=True)
                     out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
                     cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))

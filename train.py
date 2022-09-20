@@ -114,11 +114,12 @@ if __name__ == '__main__':
 					model.test()
 				time_val += time.time() - time_val_start
 				res = model.get_current_visuals()
+				lpipses[i] = calc_lpips(res['clean_img'], res['derained_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
 				derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
 				clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
 				psnr[i] = calc_psnr(clean, derained, data_range=1.)
 				ssim[i] = calc_ssim(clean, derained, multichannel=True)
-				lpipses[i] = 0 # calc_lpips(res['derained_img'], res['clean_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
+				# lpipses[i] = calc_lpips(res['derained_img'], res['clean_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
 			visualizer.print_psnr(epoch, opt.niter + opt.niter_decay, time_val, np.mean(psnr))
 			visualizer.print_ssim(epoch, opt.niter + opt.niter_decay, time_val, np.mean(ssim))
 			visualizer.print_lpips(epoch, opt.niter + opt.niter_decay, time_val, np.mean(lpipses))

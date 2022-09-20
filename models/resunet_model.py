@@ -8,7 +8,6 @@ from . import networks as N
 from . import BaseModel as BaseModel
 from . import losses as L
 
-
 class RESUNETModel(BaseModel):
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
@@ -17,10 +16,11 @@ class RESUNETModel(BaseModel):
 		parser.add_argument('--n_blocks', type=int, default=9)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
-		parser.add_argument('--l1_loss_weight', type=float, default=0.0)
+		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
-		parser.add_argument('--charbonnier_loss_weight', type=float, default=0.1)
+		parser.add_argument('--charbonnier_loss_weight', type=float, default=0.0)
 		parser.add_argument('--CX_loss_weight', type=float, default=0.0)
+		parser.add_argument('--test_internet', type=bool, default=False)
 		return parser
 
 	def __init__(self, opt):
@@ -37,7 +37,10 @@ class RESUNETModel(BaseModel):
 		if self.opt.CX_loss_weight > 0:
 			self.loss_names.append('UNET_CX')
 
-		self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
+		if self.opt.test_internet:
+			self.visual_names = ['rainy_img', 'derained_img']
+		else:
+			self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
 		self.model_names = ['UNET']
 		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
 
@@ -74,7 +77,8 @@ class RESUNETModel(BaseModel):
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
-		self.clean_img = input['clean_img'].to(self.device)
+		if not self.opt.test_internet:
+			self.clean_img = input['clean_img'].to(self.device)
 		self.name = input['file_name']
 
 	def forward(self):
@@ -280,7 +284,7 @@ class UNET(nn.Module):
 	def forward(self, x, res=True):
 		out_img = self.resnet(x)
 		if res:
-			out = x + out_img
+			out = x - out_img
 			out_img = torch.clip(out, -1, 1)
 		return out_img
 		

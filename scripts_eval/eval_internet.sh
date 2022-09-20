@@ -9,15 +9,15 @@
 ### 
 echo "Start to test the model...."
 
-name=""
-device="0"
+name="gt-rain-unet-guidedfilter"
+device="7"
 
-python test_interenet_img.py \
+python test_internet_img.py \
     --dataset_name TEST\
-    --model resunet\
+    --model unet\
     --name $name\
-    --load_iter 20\
-    --calc_metrics True\
+    --load_iter 40\
+    --calc_metrics False\
     --save_imgs True\
     --gpu_ids $device
 

@@ -10,7 +10,7 @@
 echo "Start to test the model...."
 
 name="unet"
-device="0"
+device="7"
 
 python test.py \
     --dataset_name GTRAIN\

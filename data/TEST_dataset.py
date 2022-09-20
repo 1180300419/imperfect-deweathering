@@ -11,9 +11,9 @@ from util.rotation_data_aug import gen_rotate_image
 import torchvision.transforms.functional as TF
 
 
-class GTRAINDataset(BaseDataset):
+class TESTDataset(BaseDataset):
     def __init__(self, opt, split='train', dataset_name='GT-Rain'):
-        super(GTRAINDataset, self).__init__(opt, split, dataset_name)
+        super(TESTDataset, self).__init__(opt, split, dataset_name)
 
         if self.root == '':
             rootlist = [
@@ -33,8 +33,6 @@ class GTRAINDataset(BaseDataset):
         self.names, self.rainy_dirs = self._get_image_dir(self.root, split)
 
         self._getitem = self._getitem_test
-        else:
-            raise ValueError
         
         self.len_data = len(self.names)
         self.rainy_imgs = [0] * len(self.names)
@@ -62,14 +60,13 @@ class GTRAINDataset(BaseDataset):
 
     def _get_image_dir(self, root, split):
         root_path = os.path.join(root, 'Real_Internet')
-        
-        
 
         names = []
         rainy_dirs = []
 
         for img in os.listdir(root_path):
             rainy_dirs.append(os.path.join(root_path, img))
+            names.append(img)
 
         return names, rainy_dirs
 

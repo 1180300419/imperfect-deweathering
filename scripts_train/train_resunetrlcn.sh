@@ -11,7 +11,7 @@
 
 echo "Start to train the model..."
 
-name="sub_resunet"
+name="resunet-rlcn"
 
 build_dir="../checkpoints/"$name
 

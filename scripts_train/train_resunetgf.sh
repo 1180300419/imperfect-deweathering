@@ -11,7 +11,7 @@
 
 echo "Start to train the model..."
 
-name="sub_resunet"
+name="resunet-guidedfilter"
 
 build_dir="../checkpoints/"$name
 
@@ -28,7 +28,7 @@ python train.py \
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
-        --model  resunet\
+        --model  resunetgf\
         --niter 20\
         --lr_policy 'warmup'\
         --lr 2e-4\
@@ -37,7 +37,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 5\
+        --gpu_ids 0,1\
         -j 4  | tee $LOG  
 
 

@@ -7,10 +7,10 @@ import functools
 from . import networks as N
 from . import BaseModel as BaseModel
 from . import losses as L
-from skimage import exposure
+import torch.nn.functional as F
 
 
-class UNETModel(BaseModel):
+class RESUNETRLCNModel(BaseModel):
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
 		parser.add_argument('--data_section', type=str, default='-1-1')
@@ -20,26 +20,25 @@ class UNETModel(BaseModel):
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
 		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
-		parser.add_argument('--vgg19_loss_weight', type=float, default=0.0)
-		parser.add_argument('--hist_matched_weight', type=float, default=0.0)
-
-		parser.add_argument('--test_internet', type=bool, default=True)
+		parser.add_argument('--charbonnier_loss_weight', type=float, default=0.0)
+		parser.add_argument('--CX_loss_weight', type=float, default=0.0)
+		parser.add_argument('--test_internet', type=bool, default=False)
 		return parser
 
 	def __init__(self, opt):
-		super(UNETModel, self).__init__(opt)
+		super(RESUNETRLCNModel, self).__init__(opt)
 
 		self.opt = opt
-
+        self.lcn_window_size = 9
 		self.loss_names = ['Total']
 		if self.opt.l1_loss_weight > 0:
 			self.loss_names.append('UNET_L1')
 		if self.opt.ssim_loss_weight > 0:
 			self.loss_names.append('UNET_MSSIM')
-		if opt.vgg19_loss_weight > 0:
-			self.loss_names.append('UNET_VGG19')
-		if opt.hist_matched_weight > 0:
-			self.loss_names.append('UNET_HISTED')
+		if self.opt.charbonnier_loss_weight > 0:
+			self.loss_names.append('UNET_Charbonnier')
+		if self.opt.CX_loss_weight > 0:
+			self.loss_names.append('UNET_CX')
 
 		if self.opt.test_internet:
 			self.visual_names = ['rainy_img', 'derained_img']
@@ -76,20 +75,38 @@ class UNETModel(BaseModel):
 
 			self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
 			self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
-			if opt.vgg19_loss_weight > 0:
-				self.critrionVGG19 = N.init_net(L.VGGLoss(), gpu_ids=opt.gpu_ids)
+			self.criterionChab = N.init_net(L.L1_Charbonnier_loss(), gpu_ids=opt.gpu_ids)
+			self.criterionCX = N.init_net(L.Contextual_Bilateral_Loss(), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
 		if not self.opt.test_internet:
 			self.clean_img = input['clean_img'].to(self.device)
+
+        ####
+        real_A_before_LCN = (self.rainy_img + 1) / 2.0
+
+        self.rlcn_r, _, _ = RLCN(real_A_before_LCN[:, [0], ...], kSize=self.lcn_window_size, input_nc=1, output_nc=1,
+                                device=self.device)
+        self.rlcn_g, _, _ = RLCN(real_A_before_LCN[:, [1], ...], kSize=self.lcn_window_size, input_nc=1, output_nc=1,
+                                device=self.device)
+        self.rlcn_b, _, _ = RLCN(real_A_before_LCN[:, [2], ...], kSize=self.lcn_window_size, input_nc=1, output_nc=1,
+                                device=self.device)
+        self.rlcn = torch.cat([self.rlcn_r, self.rlcn_g, self.rlcn_b], dim=1)
+        self.rlcn = torch.clamp(self.rlcn, min=0.0, max=1.0).to(self.device)
+
+		rlcn_img = torch.clamp((self.rlcn.detach() * 0.5 + 0.5) * 255, 0, 255).round()
+		out_img = np.array(rlcn_img[0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+        cv2.imwrite('./out.png', cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+		print('done')
+		exit(0)
+        ####
 		self.name = input['file_name']
 
 	def forward(self):
-		self.derained_img = self.netUNET(self.rainy_img)
+		self.derained_img = self.netUNET(self.rainy_img, self.rlcn)
 
 	def backward(self):
-
 		self.loss_Total = 0
 
 		if self.opt.ssim_loss_weight > 0:
@@ -99,22 +116,15 @@ class UNETModel(BaseModel):
 		if self.opt.l1_loss_weight > 0:
 			self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() ## 
 			self.loss_Total += self.opt.l1_loss_weight * self.loss_UNET_L1
+		
+		if self.opt.charbonnier_loss_weight > 0:
+			self.loss_UNET_Charbonnier = self.criterionChab(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.charbonnier_loss_weight * self.loss_UNET_Charbonnier
 
-		if self.opt.vgg19_loss_weight > 0:
-			self.loss_UNET_VGG19 = self.critrionVGG19(self.derained_img, self.clean_img).mean()
-			self.loss_Total += self.opt.vgg19_loss_weight * self.loss_UNET_VGG19
+		if self.opt.CX_loss_weight > 0:
+			self.loss_UNET_CX = self.criterionCX(self.derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.CX_loss_weight * self.loss_UNET_CX
 
-		if self.opt.hist_matched_weight > 0:
-			for m in range(self.derained_img.shape[0]):
-				derained = self.derained_img[m].detach().cpu().numpy()
-				clean = self.clean_img[m].detach().cpu().numpy()
-				img_np = exposure.match_histograms(clean, derained, multichannel=True)
-				print(img_np)
-				self.clean_img[m] = torch.from_numpy(img_np).to(self.device)
-				
-			self.loss_UNET_HISTED = self.criterionL1(self.derained_img, self.clean_img).mean()
-			self.loss_Total += self.opt.hist_matched_weight * self.loss_UNET_HISTED
-			
 		self.loss_Total.backward()
 
 	def optimize_parameters(self):
@@ -131,6 +141,38 @@ class UNETModel(BaseModel):
 		self.optimizer_UNET.step()
 		self.update_learning_rate()
 
+def RLCN(img, kSize=9, input_nc=3, output_nc=3, noise_mask=None, device='cuda:0'):
+    '''
+        Args:
+            img : N * C * H * W
+            kSize : 9 * 9
+    '''
+	# print(device)
+	# exit(0)
+    w = torch.ones((output_nc, input_nc, kSize, kSize)).to(device)
+    N_counter = torch.ones_like(img).to(device)
+
+    N = F.conv2d(input=N_counter, weight=w, padding=kSize // 2)
+
+    epsilon = 1e-5
+
+    mean_local = F.conv2d(input=img, weight=w, padding=kSize // 2)
+
+    mean_square_local = F.conv2d(input=img ** 2, weight=w, padding=kSize // 2)
+
+    std_local = (mean_square_local - mean_local ** 2 / N) / (N - 1) + epsilon
+
+    # print(std_local[std_local < 0])
+    if torch.isnan(torch.sum(std_local)):
+        print('std_local before sqrt is nan')
+    std_local = torch.sqrt(std_local)
+    if torch.isnan(torch.sum(std_local)):
+        print('std_local after sqrt is nan')
+
+    if noise_mask is None:
+        return (img - mean_local / N) / (std_local + epsilon), mean_local, std_local
+    else:
+        return (img - mean_local / N) / (std_local + epsilon) * noise_mask, mean_local, std_local
 
 class ResNetModified(nn.Module):
 	"""
@@ -286,15 +328,17 @@ class UNET(nn.Module):
 		super(UNET, self).__init__()
 
 		self.resnet = ResNetModified(
-			input_nc=3, output_nc=3, ngf=ngf, 
+			input_nc=6, output_nc=3, ngf=ngf, 
 			norm_layer=N.get_norm_layer(norm_layer_type),
 			activation_func=activation_func,
 			use_dropout=False, n_blocks=n_blocks, 
 			padding_type='reflect',
 			upsample_mode=upsample_mode)
 
-	def forward(self, x, res=False):
-		out_img = self.resnet(x)
+	def forward(self, x, rlcn, res=True):
+		out_img = self.resnet(torch.cat((x, rlcn), dim=1))
 		if res:
-			out_img += x
+			out = x - out_img
+			out_img = torch.clip(out, -1, 1)
 		return out_img
+		
