@@ -126,6 +126,7 @@ class RESUNETGFModel(BaseModel):
 		self.forward()
 		self.optimizer_UNET.zero_grad()
 		self.backward()
+		torch.nn.utils.clip_grad_norm_(self.netUNET.parameters(), 0.1)
 		self.optimizer_UNET.step()
 
 	def forward_x8(self):
