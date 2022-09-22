@@ -109,7 +109,6 @@ class UNETModel(BaseModel):
 				derained = self.derained_img[m].detach().cpu().numpy()
 				clean = self.clean_img[m].detach().cpu().numpy()
 				img_np = exposure.match_histograms(clean, derained, multichannel=True)
-				print(img_np)
 				self.clean_img[m] = torch.from_numpy(img_np).to(self.device)
 				
 			self.loss_UNET_HISTED = self.criterionL1(self.derained_img, self.clean_img).mean()
