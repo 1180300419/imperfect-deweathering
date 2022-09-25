@@ -24,9 +24,9 @@ class UNETGANModel(BaseModel):
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
 		parser.add_argument('--vgg19_loss_weight', type=float, default=0.0)
 		parser.add_argument('--hist_matched_weight', type=float, default=0.0)
-        parser.add_argument('--gan_loss_weight', type=float, default=0.1)
-        parser.add_argument('--gan_type', type=str, default='vanilla')
-		parser.add_argument('--test_internet', type=bool, default=True)
+		parser.add_argument('--gan_loss_weight', type=float, default=0.1)
+		parser.add_argument('--gan_type', type=str, default='vanilla')
+		parser.add_argument('--test_internet', type=bool, default=False)
 		return parser
 
 	def __init__(self, opt):
@@ -39,15 +39,16 @@ class UNETGANModel(BaseModel):
 			self.loss_names.append('UNET_L1')
 		if self.opt.ssim_loss_weight > 0:
 			self.loss_names.append('UNET_MSSIM')
-        if self.opt.gan_loss_weight > 0:
-            self.loss_names.append('GAN')
+		if self.opt.gan_loss_weight > 0:
+			self.loss_names.append('GAN')
 
 		if self.opt.test_internet:
 			self.visual_names = ['rainy_img', 'derained_img']
 		else:
 			self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
+		
 		self.model_names = ['UNET', 'D']
-		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
+		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer, 'D_optimizer_%s' % opt.optimizer]
 
 		unet = UNET(
 				ngf=opt.ngf,
@@ -55,10 +56,10 @@ class UNETGANModel(BaseModel):
 				norm_layer_type=opt.norm_layer_type,
 				activation_func=torch.nn.LeakyReLU(negative_slope=0.10, inplace=True),
 				upsample_mode=opt.upsample_mode)
-        disnet = UNetDiscriminatorSN(num_in_ch=3, num_feat=64. skip_connection=True)
+		disnet = UNetDiscriminatorSN(num_in_ch=3, num_feat=64, skip_connection=True)
 
 		self.netUNET = N.init_net(unet, opt.init_type, opt.init_gain, opt.gpu_ids)
-        self.netD = N.init_net(disnet, opt.init_type, opt.init_gain, opt.gpu_ids)
+		self.netD = N.init_net(disnet, opt.init_type, opt.init_gain, opt.gpu_ids)
 
 		if self.isTrain:
 			key_name_list = ['offset', 'modulator']
@@ -76,21 +77,20 @@ class UNETGANModel(BaseModel):
 				lr=opt.lr,
 				betas=(0.9, 0.999),
 				eps=1e-8)
-            
-            self.optimizer_D = optim.Adam(   # 优化器参数还需要进行调整
-                self.net_D.parameters(),
-                lr=opt.lr,
-                betas=(0.9, 0.999),
-                eps=1e-8
-            )
+			
+			self.optimizer_D = optim.Adam(   # 优化器参数还需要进行调整
+				self.netD.parameters(),
+				lr=opt.lr,
+				betas=(0.9, 0.999),
+				eps=1e-8)
 			self.optimizers = [self.optimizer_UNET, self.optimizer_D]
 
 			self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
 			self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
 			if opt.vgg19_loss_weight > 0:
 				self.critrionVGG19 = N.init_net(L.VGGLoss(), gpu_ids=opt.gpu_ids)
-            if opt.gan_loss_weight > 0:
-                self.criterionGAN = N.init_net(L.GANLoss(gan_type=opt.gan_type), gpu_ids=opt.gpu_ids)
+			if opt.gan_loss_weight > 0:
+				self.criterionGAN = N.init_net(L.GANLoss(opt.gan_type), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
@@ -101,18 +101,18 @@ class UNETGANModel(BaseModel):
 	def forward(self):
 		self.derained_img = self.netUNET(self.rainy_img)
 
-    def backward_D(self):
-        predict_fake = self.net_D(self.derained_img.detach())
-        loss_GAN_fake = self.criterionGAN(predict_fake, False, is_disc=True).mean()
+	def backward_D(self):
+		predict_fake = self.netD(self.derained_img.detach())
+		loss_GAN_fake = self.criterionGAN(predict_fake, False, is_disc=True).mean()
 
-        predict_real = self.net_D(self.clean_img)
-        loss_GAN_real = self.criterionGAN(predict_real, True, is_disc=True).mean()
+		predict_real = self.netD(self.clean_img)
+		loss_GAN_real = self.criterionGAN(predict_real, True, is_disc=True).mean()
 
-        self.loss_Total_D = 0.5 * (loss_GAN_fake + loss_GAN_real)
-        self.loss_Total_D.backward()
-    
-    def backward_G(self):
-        self.loss_Total_G = 0
+		self.loss_Total_D = 0.5 * (loss_GAN_fake + loss_GAN_real)
+		self.loss_Total_D.backward()
+	
+	def backward_G(self):
+		self.loss_Total_G = 0
 
 		if self.opt.ssim_loss_weight > 0:
 			self.loss_UNET_MSSIM = self.criterionMSSIM(self.derained_img, self.clean_img).mean()
@@ -122,40 +122,40 @@ class UNETGANModel(BaseModel):
 			self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() 
 			self.loss_Total_G += self.opt.l1_loss_weight * self.loss_UNET_L1
 		
-        predict_fake = self.net_d(self.derained_img)
-        self.loss_GAN = self.criterionGAN(predict_fake, True, is_disc=False).mean()
+		predict_fake = self.netD(self.derained_img)
+		self.loss_GAN = self.criterionGAN(predict_fake, True, is_disc=False).mean()
 
-        self.losss_Total_G += self.gan_loss_weight * self.loss_GAN
+		self.loss_Total_G += self.opt.gan_loss_weight * self.loss_GAN
 
 		self.loss_Total_G.backward()
 
 	def optimize_parameters(self):
-        
+		
 		self.forward()
 
-        # update D
-        self.set_requires_grad(self.net_D, True)
-        self.optimizer_D.zero_grad()
-        self.backward_D()
-        self.optimizer_D.step()
+		# update D
+		self.set_requires_grad(self.netD, True)
+		self.optimizer_D.zero_grad()
+		self.backward_D()
+		self.optimizer_D.step()
 
-        # update G
-        self.set_requires_grad(self.net_D, False)
-        self.optimizer_UNET.zero_grad()
-        self.backward_G()
-        self.optimizer_UNET.step()
+		# update G
+		self.set_requires_grad(self.netD, False)
+		self.optimizer_UNET.zero_grad()
+		self.backward_G()
+		self.optimizer_UNET.step()
 
 	def forward_x8(self):
 		pass
 
 	def update_before_iter(self):
 		self.optimizer_UNET.zero_grad()
-        self.optimizer_D.zero_grad()
+		self.optimizer_D.zero_grad()
 
 		self.optimizer_UNET.step()
-        self.optimizer_D.step()
+		self.optimizer_D.step()
 		
-        self.update_learning_rate()
+		self.update_learning_rate()
 
 class ResNetModified(nn.Module):
 	"""
@@ -325,61 +325,61 @@ class UNET(nn.Module):
 		return out_img
 
 class UNetDiscriminatorSN(nn.Module):
-    """Defines a U-Net discriminator with spectral normalization (SN)
-    It is used in Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data.
-    Arg:
-        num_in_ch (int): Channel number of inputs. Default: 3.
-        num_feat (int): Channel number of base intermediate features. Default: 64.
-        skip_connection (bool): Whether to use skip connections between U-Net. Default: True.
-    """
+	"""Defines a U-Net discriminator with spectral normalization (SN)
+	It is used in Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data.
+	Arg:
+		num_in_ch (int): Channel number of inputs. Default: 3.
+		num_feat (int): Channel number of base intermediate features. Default: 64.
+		skip_connection (bool): Whether to use skip connections between U-Net. Default: True.
+	"""
 
-    def __init__(self, num_in_ch, num_feat=64, skip_connection=True):
-        super(UNetDiscriminatorSN, self).__init__()
-        self.skip_connection = skip_connection
-        norm = spectral_norm
-        # the first convolution
-        self.conv0 = nn.Conv2d(num_in_ch, num_feat, kernel_size=3, stride=1, padding=1)
-        # downsample
-        self.conv1 = norm(nn.Conv2d(num_feat, num_feat * 2, 4, 2, 1, bias=False))
-        self.conv2 = norm(nn.Conv2d(num_feat * 2, num_feat * 4, 4, 2, 1, bias=False))
-        self.conv3 = norm(nn.Conv2d(num_feat * 4, num_feat * 8, 4, 2, 1, bias=False))
-        # upsample
-        self.conv4 = norm(nn.Conv2d(num_feat * 8, num_feat * 4, 3, 1, 1, bias=False))
-        self.conv5 = norm(nn.Conv2d(num_feat * 4, num_feat * 2, 3, 1, 1, bias=False))
-        self.conv6 = norm(nn.Conv2d(num_feat * 2, num_feat, 3, 1, 1, bias=False))
-        # extra convolutions
-        self.conv7 = norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
-        self.conv8 = norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
-        self.conv9 = nn.Conv2d(num_feat, 1, 3, 1, 1)
+	def __init__(self, num_in_ch, num_feat=64, skip_connection=True):
+		super(UNetDiscriminatorSN, self).__init__()
+		self.skip_connection = skip_connection
+		norm = spectral_norm
+		# the first convolution
+		self.conv0 = nn.Conv2d(num_in_ch, num_feat, kernel_size=3, stride=1, padding=1)
+		# downsample
+		self.conv1 = norm(nn.Conv2d(num_feat, num_feat * 2, 4, 2, 1, bias=False))
+		self.conv2 = norm(nn.Conv2d(num_feat * 2, num_feat * 4, 4, 2, 1, bias=False))
+		self.conv3 = norm(nn.Conv2d(num_feat * 4, num_feat * 8, 4, 2, 1, bias=False))
+		# upsample
+		self.conv4 = norm(nn.Conv2d(num_feat * 8, num_feat * 4, 3, 1, 1, bias=False))
+		self.conv5 = norm(nn.Conv2d(num_feat * 4, num_feat * 2, 3, 1, 1, bias=False))
+		self.conv6 = norm(nn.Conv2d(num_feat * 2, num_feat, 3, 1, 1, bias=False))
+		# extra convolutions
+		self.conv7 = norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
+		self.conv8 = norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
+		self.conv9 = nn.Conv2d(num_feat, 1, 3, 1, 1)
 
-    def forward(self, x):
-        # downsample
-        x0 = F.leaky_relu(self.conv0(x), negative_slope=0.2, inplace=True)  # H * W 
-        x1 = F.leaky_relu(self.conv1(x0), negative_slope=0.2, inplace=True)
-        x2 = F.leaky_relu(self.conv2(x1), negative_slope=0.2, inplace=True)
-        x3 = F.leaky_relu(self.conv3(x2), negative_slope=0.2, inplace=True)
+	def forward(self, x):
+		# downsample
+		x0 = F.leaky_relu(self.conv0(x), negative_slope=0.2, inplace=True)  # H * W 
+		x1 = F.leaky_relu(self.conv1(x0), negative_slope=0.2, inplace=True)
+		x2 = F.leaky_relu(self.conv2(x1), negative_slope=0.2, inplace=True)
+		x3 = F.leaky_relu(self.conv3(x2), negative_slope=0.2, inplace=True)
 
-        # upsample
-        x3 = F.interpolate(x3, scale_factor=2, mode='bilinear', align_corners=False)
-        x4 = F.leaky_relu(self.conv4(x3), negative_slope=0.2, inplace=True)
+		# upsample
+		x3 = F.interpolate(x3, scale_factor=2, mode='bilinear', align_corners=False)
+		x4 = F.leaky_relu(self.conv4(x3), negative_slope=0.2, inplace=True)
 
-        if self.skip_connection:
-            x4 = x4 + x2
-        x4 = F.interpolate(x4, scale_factor=2, mode='bilinear', align_corners=False)
-        x5 = F.leaky_relu(self.conv5(x4), negative_slope=0.2, inplace=True)
+		if self.skip_connection:
+			x4 = x4 + x2
+		x4 = F.interpolate(x4, scale_factor=2, mode='bilinear', align_corners=False)
+		x5 = F.leaky_relu(self.conv5(x4), negative_slope=0.2, inplace=True)
 
-        if self.skip_connection:
-            x5 = x5 + x1
-        x5 = F.interpolate(x5, scale_factor=2, mode='bilinear', align_corners=False)
-        x6 = F.leaky_relu(self.conv6(x5), negative_slope=0.2, inplace=True)
+		if self.skip_connection:
+			x5 = x5 + x1
+		x5 = F.interpolate(x5, scale_factor=2, mode='bilinear', align_corners=False)
+		x6 = F.leaky_relu(self.conv6(x5), negative_slope=0.2, inplace=True)
 
-        if self.skip_connection:
-            x6 = x6 + x0
+		if self.skip_connection:
+			x6 = x6 + x0
 
-        # extra convolutions
-        out = F.leaky_relu(self.conv7(x6), negative_slope=0.2, inplace=True)
-        out = F.leaky_relu(self.conv8(out), negative_slope=0.2, inplace=True)
-        out = self.conv9(out)
+		# extra convolutions
+		out = F.leaky_relu(self.conv7(x6), negative_slope=0.2, inplace=True)
+		out = F.leaky_relu(self.conv8(out), negative_slope=0.2, inplace=True)
+		out = self.conv9(out)
 
-        return out
+		return out
 

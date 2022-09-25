@@ -96,10 +96,10 @@ class RESUNETRLCNModel(BaseModel):
         self.rlcn = torch.clamp(self.rlcn, min=0.0, max=1.0).to(self.device)
 
 		rlcn_img = torch.clamp((self.rlcn.detach() * 0.5 + 0.5) * 255, 0, 255).round()
-		out_img = np.array(rlcn_img[0].cpu()).astype(np.uint8).transpose((1, 2, 0))
-        cv2.imwrite('./out.png', cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-		print('done')
-		exit(0)
+		# out_img = np.array(rlcn_img[0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+        # cv2.imwrite('./out.png', cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+		# print('done')
+		# exit(0)
         ####
 		self.name = input['file_name']
 
