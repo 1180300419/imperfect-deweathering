@@ -10,13 +10,13 @@
 echo "Start to test the model...."
 
 name="unet"
-device="7"
+device="2"
 
-python test.py \
+python test_hist.py \
     --dataset_name GTRAIN\
     --model unet\
     --name $name\
-    --load_iter 16\
+    --load_iter 20\
     --calc_metrics True\
     --save_imgs True\
     --gpu_ids $device

@@ -65,7 +65,7 @@ class GTRAINDataset(BaseDataset):
         # rain mix 
         rainy_img = self.rainy_imgs[index]  # C * H * W
         clean_img = self.clean_imgs[index]
-        rainy_img, clean_img = rain_aug(rainy_img, clean_img, self.rain_mask_dir, zoom_min=self.zoom_min, zoom_max=self.zoom_max)
+        # rainy_img, clean_img = rain_aug(rainy_img, clean_img, self.rain_mask_dir, zoom_min=self.zoom_min, zoom_max=self.zoom_max)
 
         # Random rotation
         angle = np.random.normal(0, self.sigma)

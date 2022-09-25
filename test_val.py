@@ -62,6 +62,11 @@ if __name__ == '__main__':
             psnr = [0.0] * dataset_size_test
             ssim = [0.0] * dataset_size_test
             lpipses = [0.0] * dataset_size_test
+
+            psnr_scene = {}
+            ssim_scene = {}
+            lpips_scene = {}
+
             time_val = 0
             # print(dataset_size_test)
             for i, data in enumerate(tqdm_val):
@@ -79,24 +84,24 @@ if __name__ == '__main__':
                     derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
                     clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
 
-                    clean = exposure.match_histograms(clean, derained, multichannel=True)
-                    # cv2.imwrite()
-                    clean_ten = torch.from_numpy(clean.transpose(2, 0, 1)).unsqueeze(0).to(opt.gpu_ids[0])
-
-                    lpipses[i] = calc_lpips(clean_ten.float(), res['derained_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
+                    lpipses[i] = calc_lpips(res['clean_img'], res['derained_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
                     psnr[i] = calc_psnr(clean, derained, data_range=1.)
                     ssim[i] = calc_ssim(clean, derained, multichannel=True)
                     
+                    if psnr_scene.has_key(data['file_name'][0][:-17]):
+                        psnr_scene[data['file_name'][0][:-17]].append(psnr[i])
+                        ssim_scene[data['file_name'][0][:-17]].append(ssim[i])
+                        lpips_scene[data['file_name'][0][:-17]].append(lpipses[i])
+                    else:
+                        psnr_scene[data['file_name'][0][:-17]] = [psnr[i]]
+                        ssim_scene[data['file_name'][0][:-17]] = [ssim[i]]
+                        lpips_scene[data['file_name'][0][:-17]] = [lpipses[i]]
 
                 if opt.save_imgs:
                     save_dir_rgb = os.path.join('../checkpoints', opt.name, 'epoch_' + str(opt.load_iter), 'rgb_out', data['file_name'][0][:-17])
-                    save_dir_histed_rgb = os.path.join('../checkpoints', opt.name, 'epoch_' + str(opt.load_iter), 'histed_GT', data['file_name'][0][:-17])
                     os.makedirs(save_dir_rgb, exist_ok=True)
-                    os.makedirs(save_dir_histed_rgb, exist_ok=True)
                     out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
                     cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-                    cv2.imwrite(os.path.join(save_dir_histed_rgb, data['file_name'][0]), cv2.cvtColor((clean * 255).astype(np.uint8), cv2.COLOR_RGB2BGR))
-                    # cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
 
 
             avg_psnr_rgb = '%.2f'%np.mean(psnr)
@@ -105,6 +110,10 @@ if __name__ == '__main__':
 
             print('Epoch %d Time: %.3f s AVG Time: %.3f ms PSNR: %s SSIM: %s LPIPS: %s\n' % (opt.load_iter, time_val, time_val/dataset_size_test*1000, avg_psnr_rgb, avg_ssim_rgb, avg_lpips_rgb))
 
+            for scene in psnr_scene.keys():
+                print(scene)
+                print('PSNR: %s SSIM: %s LPIPS: %s\n' % (mean(psnr_scene[scene]), mean(ssim_scene[scene]), lpips_scene[scene]))
+                
     for dataset in datasets:
         datasets[dataset].close()
 

@@ -224,7 +224,7 @@ def rain_aug(img_rainy, img_gt, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
   img_rainy_ret = img_rainy
   img_gt_ret = img_gt
 
-  rainlayer_rand2 = getRandRainLayer2(rain_mask_dir)
+  rainlayer_rand2 = getRandRainLayer2(rain_mask_dir)  # 随机获得雨的mask
   rainlayer_aug2 = augment_and_mix(rainlayer_rand2, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
 
   height = min(img_rainy.shape[0], rainlayer_aug2.shape[0])
