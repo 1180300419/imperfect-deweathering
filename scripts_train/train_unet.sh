@@ -11,7 +11,7 @@
 
 echo "Start to train the model..."
 
-name="baseline"
+name="unet-laplacian"
 
 build_dir="../checkpoints/"$name
 
@@ -30,7 +30,7 @@ python train.py \
         --batch_size 8\
         --patch_size 256\
         --model  unet\
-        --niter 40\
+        --niter 20\
         --lr_policy 'warmup'\
         --lr 2e-4\
         --min_lr 1e-6\
@@ -38,7 +38,7 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 2\
+        --gpu_ids 0\
         -j 4  | tee $LOG  
 
 

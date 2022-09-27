@@ -8,6 +8,7 @@ from . import networks as N
 from . import BaseModel as BaseModel
 from . import losses as L
 from skimage import exposure
+from util.util import rgbten2ycbcrten
 
 
 class UNETModel(BaseModel):
@@ -23,7 +24,10 @@ class UNETModel(BaseModel):
 		parser.add_argument('--vgg19_loss_weight', type=float, default=0.0)
 		parser.add_argument('--hist_matched_weight', type=float, default=0.0)
 
-		parser.add_argument('--test_internet', type=bool, default=True)
+		parser.add_argument('--gradient_loss_weight', type=float, default=0.0)
+		parser.add_argument('--laplacian_pyramid_weight', type=float, default=0.05)
+
+		parser.add_argument('--test_internet', type=bool, default=False)
 		return parser
 
 	def __init__(self, opt):
@@ -40,6 +44,10 @@ class UNETModel(BaseModel):
 			self.loss_names.append('UNET_VGG19')
 		if opt.hist_matched_weight > 0:
 			self.loss_names.append('UNET_HISTED')
+		if opt.gradient_loss_weight > 0:
+			self.loss_names.append('UNET_GRADIENT')
+		if opt.laplacian_pyramid_weight > 0:
+			self.loss_names.append('UNET_LAPLACIAN')
 
 		if self.opt.test_internet:
 			self.visual_names = ['rainy_img', 'derained_img']
@@ -74,10 +82,17 @@ class UNETModel(BaseModel):
 				eps=1e-8)
 			self.optimizers = [self.optimizer_UNET]
 
-			self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
-			self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
+			if self.opt.l1_loss_weight > 0:
+				self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
+			if self.opt.ssim_loss_weight > 0:
+				self.criterionMSSIM = N.init_net(L.ShiftMSSSIM(), gpu_ids=opt.gpu_ids)
 			if opt.vgg19_loss_weight > 0:
 				self.critrionVGG19 = N.init_net(L.VGGLoss(), gpu_ids=opt.gpu_ids)
+
+			if opt.gradient_loss_weight > 0:
+				self.criterionGradient = N.init_net(L.GWLoss(w=4, reduction='mean'), gpu_ids=opt.gpu_ids)
+			if opt.laplacian_pyramid_weight > 0:
+				self.criterionLaplacian = N.init_net(L.LapPyrLoss(num_levels=3, lf_mode='ssim', hf_mode='cb', reduction='mean'), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
@@ -113,7 +128,18 @@ class UNETModel(BaseModel):
 				
 			self.loss_UNET_HISTED = self.criterionL1(self.derained_img, self.clean_img).mean()
 			self.loss_Total += self.opt.hist_matched_weight * self.loss_UNET_HISTED
-			
+		
+		if self.opt.gradient_loss_weight > 0 or self.opt.laplacian_pyramid_weight > 0:
+			derained_ycbcr = rgbten2ycbcrten(self.derained_img, only_y=False)
+			clean_ycbcr = rgbten2ycbcrten(self.clean_img, only_y=False)
+
+		if self.opt.laplacian_pyramid_weight > 0:
+			self.loss_UNET_LAPLACIAN = self.criterionLaplacian(derained_ycbcr[:, :1, ...], clean_ycbcr[:, :1, ...]).mean()
+			self.loss_Total += self.opt.laplacian_pyramid_weight * self.loss_UNET_LAPLACIAN
+		if self.opt.gradient_loss_weight > 0:
+			self.loss_UNET_GRADIENT = self.criterionGradient(derained_ycbcr[:, 1:, ...], clean_ycbcr[:, 1:, ...]).mean()
+			self.loss_Total += self.opt.gradient_loss_weight * self.loss_UNET_GRADIENT
+
 		self.loss_Total.backward()
 
 	def optimize_parameters(self):

@@ -82,8 +82,6 @@ def diagnose_network(net, name='network'):
             count += 1
     if count > 0:
         mean = mean / count
-    print(name)
-    print(mean)
 
 def print_numpy(x, val=True, shp=True):
     """Print the mean, min, max, median, std, and size of a numpy array
@@ -178,11 +176,6 @@ def extract_bayer_channels(raw):  # HxW
     raw_combined = np.ascontiguousarray(raw_combined.transpose((2, 0, 1)))
     return raw_combined  # 4xHxW
 
-# def get_raw_demosaic(raw, pattern='RGGB'):  # HxW
-#     raw_demosaic = colour_demosaicing.demosaicing_CFA_Bayer_bilinear(raw, pattern=pattern)
-#     raw_demosaic = np.ascontiguousarray(raw_demosaic.astype(np.float32).transpose((2, 0, 1)))
-#     return raw_demosaic  # 3xHxW
-
 def get_coord(H, W, x=448/3968, y=448/2976):
     x_coord = np.linspace(-x + (x / W), x - (x / W), W)
     x_coord = np.expand_dims(x_coord, axis=0)
@@ -214,30 +207,6 @@ def read_wb(txtfile, key):
     wb = wb.astype(np.float32)
     return wb
 
-# ### CHECK
-# def compute_wb(raw_path):
-#     print("Computing WB for %s"%(raw_path))
-#     bayer = rawpy.imread(raw_path)
-#     rgb_nowb = bayer.postprocess(gamma=(1, 1),
-#         no_auto_bright=True,
-#         use_camera_wb=False,
-#         output_bps=16)
-
-#     rgb_wb = bayer.postprocess(gamma=(1, 1),
-#         no_auto_bright=True,
-#         use_camera_wb=True,
-#         output_bps=16)
-
-#     scale=[np.mean(rgb_wb[...,0])/np.mean(rgb_nowb[...,0]), 
-#         np.mean(rgb_wb[...,1])/np.mean(rgb_nowb[...,1]),
-#         np.mean(rgb_wb[...,1])/np.mean(rgb_nowb[...,1]),
-#         np.mean(rgb_wb[...,2])/np.mean(rgb_nowb[...,2])]
-#     wb = np.zeros((1,4))
-#     wb[0,0] = scale[0]
-#     wb[0,1] = scale[1]
-#     wb[0,2] = scale[2]
-#     wb[0,3] = scale[3]
-#     return wb
 def normalization(data):
     _range = np.max(data) - np.min(data)
     # print(np.max(data) , np.min(data))
@@ -255,3 +224,118 @@ def FFTfusion(leftLR_img, rightLR_img):
     leftLR_r = normalization(np.fft.ifft2(fft_leftLR_r))
     rightLR_l = normalization(np.fft.ifft2(fft_rightLR_l))
     return np.float32(np.abs(leftLR_r)), np.float32(np.abs(rightLR_l))
+
+
+def rgb2ycbcr(img, only_y=True):
+    """
+    same as matlab rgb2ycbcr
+    only_y: only return Y channel
+    Input:
+        uint8, [0, 255]
+        float, [0, 1]
+    """
+    in_img_type = img.dtype
+    img.astype(np.float32)
+    if in_img_type != np.uint8:
+        img *= 255.
+    # convert
+    if only_y:
+        rlt = np.dot(img, [65.481, 128.553, 24.966]) / 255.0 + 16.0
+    else:
+        rlt = np.matmul(img, [[65.481, -37.797, 112.0], [128.553, -74.203, -93.786],
+                              [24.966, 112.0, -18.214]]) / 255.0 + [16, 128, 128]
+    if in_img_type == np.uint8:
+        rlt = rlt.round()
+    else:
+        rlt /= 255.
+    return rlt.astype(in_img_type)
+
+
+def rgbten2ycbcrten(img_ten, only_y=True):
+    """
+    img_ten: torch.Tensor, [-1, 1]
+    """
+    img_ten = torch.clamp((img_ten * 0.5 + 0.5) * 255, 0, 255).round()
+    img_ten = img_ten.permute(0, 2, 3, 1)
+    # convert
+    if only_y:
+        coef = torch.tensor([65.481, 128.553, 24.966], device=img_ten.device)
+        rlt = torch.matmul(img_ten, coef) / 255.0 + 16.0
+        rlt = rlt / (255. / 2) - 1.
+        b, h, w, c = rlt.shape
+        rlt = rlt.reshape((b, c, h, w))
+        return rlt
+    else:
+        coef = torch.tensor( [
+                            [65.481, -37.797, 112.0], 
+                            [128.553, -74.203, -93.786],
+                            [24.966, 112.0, -18.214]], device=img_ten.device)
+        rlt = torch.matmul(img_ten, coef) / 255.0 + torch.tensor([16, 128, 128], device=img_ten.device)
+        rlt = rlt / (255. / 2) - 1.
+        rlt = rlt.permute(0, 3, 1, 2)
+        return rlt
+
+def bgr2ycbcr(img, only_y=True):
+    """
+    bgr version of rgb2ycbcr
+    only_y: only return Y channel
+    Input:
+        uint8, [0, 255]
+        float, [0, 1]
+    """
+    in_img_type = img.dtype
+    img.astype(np.float32)
+    if in_img_type != np.uint8:
+        img *= 255.
+    # convert
+    if only_y:
+        rlt = np.dot(img, [24.966, 128.553, 65.481]) / 255.0 + 16.0
+    else:
+        rlt = np.matmul(img, [[24.966, 112.0, -18.214], [128.553, -74.203, -93.786],
+                              [65.481, -37.797, 112.0]]) / 255.0 + [16, 128, 128]
+    if in_img_type == np.uint8:
+        rlt = rlt.round()
+    else:
+        rlt /= 255.
+    return rlt.astype(in_img_type)
+    
+def bgrten2ycbcrten(img_ten, only_y=True):
+    pass
+
+def gauss_kernel(size=5, device=torch.device('cpu'), channels=3):
+    kernel = torch.tensor([[1.,  4.,  6.,  4., 1.],
+                           [4., 16., 24., 16., 4.],
+                           [6., 24., 36., 24., 6.],
+                           [4., 16., 24., 16., 4.],
+                           [1.,  4.,  6.,  4., 1.]])
+    kernel /= 256.
+    kernel = kernel.repeat(channels, 1, 1, 1)
+    kernel = kernel.to(device)
+    return kernel
+
+def laplacian_pyramid(img, kernel, max_levels=3):
+    assert max_levels > 1
+    current = img
+    pyr = []
+    for level in range(max_levels - 1):
+        filtered = conv_gauss(current, kernel)
+        down = downsample(filtered)
+        up = upsample(down)
+        diff = current - up
+        pyr.append(diff)
+        current = down
+    pyr.append(down)
+    return pyr
+
+def conv_gauss(img, kernel):
+    img = torch.nn.functional.pad(img, (2, 2, 2, 2), mode='reflect')
+    out = torch.nn.functional.conv2d(img, kernel, groups=img.shape[1])
+    return out
+
+def downsample(x):
+    return x[:, :, ::2, ::2]
+
+def upsample(x):
+    x_up = torch.zeros(x.shape[0], x.shape[1], x.shape[2] * 2, x.shape[3] * 2, device=x.device)
+    x_up[:, :, ::2, ::2] = x
+    return conv_gauss(x_up, 4 * gauss_kernel(channels=x.shape[1], device=x.device))

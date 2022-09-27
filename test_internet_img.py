@@ -11,15 +11,11 @@ import torch
 from options.test_options import TestOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import Visualizer
 from tqdm import tqdm
-from skimage.metrics import peak_signal_noise_ratio as calc_psnr
-from skimage.metrics import structural_similarity as calc_ssim
 import time
 import numpy as np
 from collections import OrderedDict as odict
 from copy import deepcopy
-import struct
 import cv2
 
 
@@ -57,9 +53,7 @@ if __name__ == '__main__':
             print(dataset_name + ' dataset')
             tqdm_val.reset()
 
-            psnr = [0.0] * dataset_size_test
-            ssim = [0.0] * dataset_size_test
-            time_val = 0
+            # time_val = 0
             # print(dataset_size_test)
             for i, data in enumerate(tqdm_val):
                 torch.cuda.empty_cache()
@@ -68,7 +62,7 @@ if __name__ == '__main__':
                 time_val_start = time.time()
                 model.test()
                 torch.cuda.synchronize()
-                time_val += time.time() - time_val_start
+                # time_val += time.time() - time_val_start
                 res = model.get_current_visuals()
 
                 if opt.save_imgs:
@@ -76,12 +70,6 @@ if __name__ == '__main__':
                     os.makedirs(save_dir_rgb, exist_ok=True)
                     out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
                     cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-
-
-            avg_psnr_rgb = '%.2f'%np.mean(psnr)
-            avg_ssim_rgb = '%.4f'%np.mean(ssim)
-
-            print('Time: %.3f s AVG Time: %.3f ms PSNR: %s SSIM: %s \n' % (time_val, time_val/dataset_size_test*1000, avg_psnr_rgb, avg_ssim_rgb))
 
     for dataset in datasets:
         datasets[dataset].close()
