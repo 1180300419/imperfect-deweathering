@@ -22,8 +22,8 @@ class UNETGFModel(BaseModel):
 		parser.add_argument('--charbonnier_loss_weight', type=float, default=0.0)
 		parser.add_argument('--CX_loss_weight', type=float, default=0.0)
 
-        parser.add_argument('--detail_loss_weight', type=float, default=1.0)  # guided filter 
-        parser.add_argument('--color_loss_weight', type=float, default=0.0)
+		parser.add_argument('--detail_loss_weight', type=float, default=1.0)  # guided filter 
+		parser.add_argument('--color_loss_weight', type=float, default=0.0)
 
 		parser.add_argument('--test_internet', type=bool, default=False)
 		return parser
@@ -42,10 +42,10 @@ class UNETGFModel(BaseModel):
 		if self.opt.CX_loss_weight > 0:
 			self.loss_names.append('UNET_CX')
 
-        if self.opt.detail_loss_weight > 0:
-            self.loss_names.append('UNET_detail')
-        if self.opt.color_loss_weight > 0:
-            self.loss_names.append('UNET_color')
+		if self.opt.detail_loss_weight > 0:
+			self.loss_names.append('UNET_detail')
+		if self.opt.color_loss_weight > 0:
+			self.loss_names.append('UNET_color')
 
 		if self.opt.test_internet:
 			self.visual_names = ['rainy_img', 'derained_img']
@@ -92,7 +92,10 @@ class UNETGFModel(BaseModel):
 		self.name = input['file_name']
 
 	def forward(self):
-		self.derained_img, self.detail_out, self.color_out = self.netUNET(self.rainy_img, self.clean_img)
+		if self.isTrain:
+			self.derained_img, self.detail_out, self.color_out = self.netUNET(self.rainy_img, self.clean_img)
+		else:
+			self.derained_img = self.netUNET(self.rainy_img)
 
 	def backward(self):
 		self.loss_Total = 0
@@ -104,7 +107,7 @@ class UNETGFModel(BaseModel):
 		if self.opt.l1_loss_weight > 0:
 			self.loss_UNET_L1 = self.criterionL1(self.derained_img, self.clean_img).mean() ## 
 			self.loss_Total += self.opt.l1_loss_weight * self.loss_UNET_L1
-		
+
 		if self.opt.charbonnier_loss_weight > 0:
 			self.loss_UNET_Charbonnier = self.criterionChab(self.derained_img, self.clean_img).mean()
 			self.loss_Total += self.opt.charbonnier_loss_weight * self.loss_UNET_Charbonnier
@@ -112,13 +115,13 @@ class UNETGFModel(BaseModel):
 		if self.opt.CX_loss_weight > 0:
 			self.loss_UNET_CX = self.criterionCX(self.derained_img, self.clean_img).mean()
 			self.loss_Total += self.opt.CX_loss_weight * self.loss_UNET_CX
-        
-        if self.opt.detail_loss_weight > 0:
-            self.loss_UNET_detail = self.criterionL1(self.detail_out, self.clean_img).mean()
-            self.loss_Total += self.opt.detail_loss_weight * self.loss_UNET_detail
-        if self.opt.color_loss_weight > 0:
-            self.loss_UNET_color = self.criterionL1(self.color_out, self.clean_img).mean()
-            self.loss_Total += self.opt.color_loss_weight * self.loss_UNET_color
+
+		if self.opt.detail_loss_weight > 0:
+			self.loss_UNET_detail = self.criterionL1(self.detail_out, self.clean_img).mean()
+			self.loss_Total += self.opt.detail_loss_weight * self.loss_UNET_detail
+		if self.opt.color_loss_weight > 0:
+			self.loss_UNET_color = self.criterionL1(self.color_out, self.clean_img).mean()
+			self.loss_Total += self.opt.color_loss_weight * self.loss_UNET_color
 
 		self.loss_Total.backward()
 
@@ -299,13 +302,14 @@ class UNET(nn.Module):
 			padding_type='reflect',
 			upsample_mode=upsample_mode)
 
-        self.guide_filter = N.GuidedFilter(64)
+		self.guide_filter = N.GuidedFilter(64)
 
 	def forward(self, x, clean=None):
-        if clean is None:
-            out_img = self.resnet(x)
-        else:
-            out_img = self.resnet(x)
-            detail_out = self.guide_filter(out_img, clean)
-            color_out = self.guide_filter(clean, out_img)
+		if clean is None:
+			out_img = self.resnet(x)
+			return out_img
+		else:
+			out_img = self.resnet(x)
+			detail_out = self.guide_filter(out_img, clean)
+			color_out = self.guide_filter(clean, out_img)
 		return out_img, detail_out, color_out

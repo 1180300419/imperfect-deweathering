@@ -4,7 +4,7 @@ version:
 Author: Liu Xiaohui
 Date: 2022-09-16 12:39:08
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-09-19 11:21:05
+LastEditTime: 2022-10-16 17:12:50
 '''
 import os
 import torch
@@ -82,13 +82,15 @@ if __name__ == '__main__':
                     psnr[i] = calc_psnr(clean, derained, data_range=1.)
                     ssim[i] = calc_ssim(clean, derained, multichannel=True)
                     
-
                 if opt.save_imgs:
-                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'epoch_' + str(opt.load_iter), 'rgb_out', data['file_name'][0][:-17])
+                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'test_epoch_' + str(opt.load_iter), 'rgb_out', data['file_name'][0][:-17])
                     os.makedirs(save_dir_rgb, exist_ok=True)
                     out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
-                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'd.png'), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+                    rainy_img = np.array(res['rainy_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'r.png'), cv2.cvtColor(rainy_img, cv2.COLOR_RGB2BGR))
+                    clean_img = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'c.png'), cv2.cvtColor(clean_img, cv2.COLOR_RGB2BGR))
 
             avg_psnr_rgb = '%.2f'%np.mean(psnr)
             avg_ssim_rgb = '%.4f'%np.mean(ssim)
@@ -98,4 +100,3 @@ if __name__ == '__main__':
 
     for dataset in datasets:
         datasets[dataset].close()
-

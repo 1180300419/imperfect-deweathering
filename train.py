@@ -19,7 +19,7 @@ import random
 import torch.multiprocessing as mp
 import torch.nn as nn
 import lpips
-
+import os
 from skimage.metrics import peak_signal_noise_ratio as calc_psnr
 from skimage.metrics import structural_similarity as calc_ssim
 from util.util import calc_lpips 
@@ -29,10 +29,11 @@ cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 
 def setup_seed(seed=0):
 	torch.manual_seed(seed)
+	torch.cuda.manual_seed(seed)
 	torch.cuda.manual_seed_all(seed)
 	np.random.seed(seed)
 	random.seed(seed)
-	torch.backends.cudnn.enabled = True
+	# torch.backends.cudnn.enabled = True
 	torch.backends.cudnn.deterministic = True
 	torch.backends.cudnn.benchmark = True
 
@@ -78,13 +79,14 @@ if __name__ == '__main__':
 			model.optimize_parameters(); 
 
 			if total_iters % opt.print_freq == 0:
+				# print(total_iters, opt.print_freq)
 				losses = model.get_current_losses()
 				t_comp = (time.time() - iter_start_time)
 				visualizer.print_current_losses(
 					epoch, epoch_iter, losses, t_comp, t_data, total_iters)
-				if opt.save_imgs: # Too many images
-					visualizer.display_current_results(
-					'train', model.get_current_visuals(), total_iters)
+				# if opt.save_imgs: # Too many images
+				# 	visualizer.display_current_results(
+				# 	'train', model.get_current_visuals(), total_iters)
 				iter_start_time = time.time()
 
 			iter_data_time = time.time()
@@ -115,13 +117,26 @@ if __name__ == '__main__':
 				time_val += time.time() - time_val_start
 				res = model.get_current_visuals()
 				lpipses[i] = calc_lpips(res['clean_img'], res['derained_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
-				derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
-				clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
+				derained = np.array(res['derained_img'][0].cpu()).transpose((1, 2, 0)) / 255.
+				clean = np.array(res['clean_img'][0].cpu()).transpose((1, 2, 0)) / 255.
 				psnr[i] = calc_psnr(clean, derained, data_range=1.)
 				ssim[i] = calc_ssim(clean, derained, multichannel=True)
+
+				if opt.save_imgs:
+					save_dir_rgb = os.path.join('../checkpoints', opt.name, 'train_epoch_' + str(epoch), 'rgb_out', data['file_name'][0][:-17])
+					os.makedirs(save_dir_rgb, exist_ok=True)
+					out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+					cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'd.png'), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+					rainy_img = np.array(res['rainy_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+					cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'r.png'), cv2.cvtColor(rainy_img, cv2.COLOR_RGB2BGR))
+					clean_img = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+					cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'c.png'), cv2.cvtColor(clean_img, cv2.COLOR_RGB2BGR))
+
 				# lpipses[i] = calc_lpips(res['derained_img'], res['clean_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
 			visualizer.print_psnr(epoch, opt.niter + opt.niter_decay, time_val, np.mean(psnr))
 			visualizer.print_ssim(epoch, opt.niter + opt.niter_decay, time_val, np.mean(ssim))
 			visualizer.print_lpips(epoch, opt.niter + opt.niter_decay, time_val, np.mean(lpipses))
+
+
 		torch.cuda.empty_cache()
 		sys.stdout.flush()

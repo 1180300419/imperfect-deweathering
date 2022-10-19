@@ -13,6 +13,8 @@ from piq import MultiScaleSSIMLoss
 from skimage import exposure
 from IQA_pytorch import SSIM
 import util.util as util
+import math
+
 
 def gaussian(window_size, sigma):
 	gauss = torch.Tensor([exp(
@@ -614,7 +616,6 @@ class TVLoss(nn.Module):
 	def _tensor_size(self,t):
 		return t.size()[1] * t.size()[2] * t.size()[3]
 
-
 class PSNRLoss(nn.Module):
 
     def __init__(self, loss_weight=1.0, reduction='mean', toY=False):
@@ -747,7 +748,6 @@ class KL_Loss(nn.Module):
         # print((kl_fwd + kl_inv)/2)
         return (kl_fwd + kl_inv)/2
 
-
 class ShiftMSSSIM(torch.nn.Module):
   """Shifted SSIM Loss """
   def __init__(self):
@@ -757,59 +757,58 @@ class ShiftMSSSIM(torch.nn.Module):
   def forward(self, est, gt):
     # shift images back into range (0, 1)
     est = est * 0.5 + 0.5
-    gt = gt *0.5 + 0.5
+    gt = gt * 0.5 + 0.5
     return self.ssim(est, gt)
 
+class MSSSIM(torch.nn.Module):
+	"""Shifted SSIM Loss """
+	def __init__(self):
+		super(MSSSIM, self).__init__()
+		self.ssim = MultiScaleSSIMLoss(data_range=1.)
+
+	def forward(self, est, gt):
+		return self.ssim(est, gt)
 
 # Rain Robust Loss
 # Code modified from: https://github.com/sthalles/SimCLR/blob/master/simclr.py
 
 class RainRobustLoss(torch.nn.Module):
-  """Rain Robust Loss"""
-  def __init__(self, batch_size, n_views, device, temperature=0.07):
-    super(RainRobustLoss, self).__init__()
-    self.batch_size = batch_size
-    self.n_views = n_views
-    self.temperature = temperature  # 0.25
-    self.device = device
-    self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
+	"""Rain Robust Loss"""
+	def __init__(self, batch_size, n_views, temperature=0.07):
+		super(RainRobustLoss, self).__init__()
+		self.batch_size = batch_size
+		self.n_views = n_views
+		self.temperature = temperature  # 0.25
+		self.criterion = torch.nn.CrossEntropyLoss()
 
-  def forward(self, features):
-    logits, labels = self.info_nce_loss(features)
-    # print(logits.shape, labels.shape)  32*31  32
-    # print(labels.item())
-    # exit(0)
-    return self.criterion(logits, labels)
+	def forward(self, features):
+		logits, labels = self.info_nce_loss(features)
+		return self.criterion(logits, labels)
 
-  def info_nce_loss(self, features):
-    labels = torch.cat([torch.arange(self.batch_size) for i in range(self.n_views)], dim=0)
-    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
-    labels = labels.to(self.device)
+	def info_nce_loss(self, features):
+		labels = torch.cat([torch.arange(self.batch_size) for i in range(self.n_views)], dim=0)
+		labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+		labels = labels.to(features.device)
 
-    features = F.normalize(features, dim=1) # 长度变成１
-    # print('feature shape ', features.shape)  batch * 2, 1024
-    similarity_matrix = torch.matmul(features, features.T)
-    # print('similarity matrix ', similarity_matrix)  batch * 2, batch * 2
-    # discard the main diagonal from both: labels and similarities matrix
-    mask = torch.eye(labels.shape[0], dtype=torch.bool).to(self.device)
-    # print('mask shape: ', mask.shape)  32 * 32
-    # print('labels: ', labels)
-    labels = labels[~mask].view(labels.shape[0], -1)
-    # print('labels ', labels.shape)  32 * 31
-    # print('after labels ', labels)
-    similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
-    # print('similarity matrix ', similarity_matrix.shape)  32 * 31
-    # select and combine multiple positives
-    positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+		features = F.normalize(features, dim=1) # 长度变成１
 
-    # select only the negatives the negatives
-    negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
+		similarity_matrix = torch.matmul(features, features.T)
 
-    logits = torch.cat([positives, negatives], dim=1)  
-    labels = torch.zeros(logits.shape[0], dtype=torch.long).to(self.device)
-    
-    logits = logits / self.temperature
-    return logits, labels
+		mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
+		labels = labels[~mask].view(labels.shape[0], -1)
+		# print('similarity_metrix: ', similarity_matrix.shape)  # 8*8
+		# print('mask: ', mask.shape)  # 16*16
+		similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+		positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+
+		# select only the negatives the negatives
+		negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
+
+		logits = torch.cat([positives, negatives], dim=1)  
+		labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
+
+		logits = logits / self.temperature
+		return logits, labels
 
 
 def rgb2gray(rgb):
@@ -1101,40 +1100,6 @@ class StyleLoss(nn.Module):
         return loss
 
 
-class GANLoss(nn.Module):
-    """GAN loss (vanilla | lsgan | wgan-gp)"""
-    def __init__(self, gan_type, real_label_val=1.0, fake_label_val=0.0):
-        super(GANLoss, self).__init__()
-        self.gan_type = gan_type.lower()
-        self.real_label_val = real_label_val
-        self.fake_label_val = fake_label_val
-
-        if self.gan_type == 'gan' or self.gan_type == 'ragan':
-            self.loss = nn.BCEWithLogitsLoss()
-        elif self.gan_type == 'lsgan':
-            self.loss = nn.MSELoss()
-        elif self.gan_type == 'wgan-gp':
-            def wgan_loss(input, target):
-                # target is boolean
-                return -1 * input.mean() if target else input.mean()
-            self.loss = wgan_loss
-        else:
-            raise NotImplementedError('GAN type [{:s}] is not found'.format(self.gan_type))
-
-    def get_target_label(self, input, target_is_real):
-        if self.gan_type == 'wgan-gp':
-            return target_is_real
-        if target_is_real:
-            return torch.empty_like(input).fill_(self.real_label_val)
-        else:
-            return torch.empty_like(input).fill_(self.fake_label_val)
-
-    def forward(self, input, target_is_real):
-        target_label = self.get_target_label(input, target_is_real)
-        loss = self.loss(input, target_label)
-        return loss
-
-
 class GradientPenaltyLoss(nn.Module):
     """Gradient Penalty Loss"""
     def __init__(self, device=torch.device('cpu')):
@@ -1157,7 +1122,6 @@ class GradientPenaltyLoss(nn.Module):
 
         loss = ((grad_interp_norm - 1) ** 2).mean()
         return loss
-
 
 class PyramidLoss(nn.Module):
     """Pyramid Loss"""
@@ -1193,7 +1157,6 @@ class PyramidLoss(nn.Module):
             loss += self.loss(pyr_x[i], pyr_y[i])
         return loss
 
-
 class LapPyrLoss(nn.Module):
     """Pyramid Loss"""
     def __init__(self, num_levels=3, lf_mode='ssim', hf_mode='cb', reduction='mean'):
@@ -1225,3 +1188,184 @@ class LapPyrLoss(nn.Module):
             loss += self.hf_loss(pyr_x[i], pyr_y[i])
         return loss
 
+class AlignedL1(nn.Module):
+	""" Computes L2 error after performing spatial and color alignment of the input image to GT"""
+	def __init__(self, alignment_net, sr_factor=1, boundary_ignore=None):
+		super().__init__()
+		self.sca = SpatialColorAlignment(alignment_net, sr_factor)
+		self.boundary_ignore = boundary_ignore
+		self.l1loss = torch.nn.L1Loss()
+
+	def forward(self, pred, gt):
+		pred_warped_m, valid = self.sca(pred, gt)
+
+		# Ignore boundary pixels if specified
+		if self.boundary_ignore is not None:
+			pred_warped_m = pred_warped_m[..., self.boundary_ignore:-self.boundary_ignore,
+							self.boundary_ignore:-self.boundary_ignore]
+			gt = gt[..., self.boundary_ignore:-self.boundary_ignore, self.boundary_ignore:-self.boundary_ignore]
+
+			valid = valid[..., self.boundary_ignore:-self.boundary_ignore, self.boundary_ignore:-self.boundary_ignore]
+
+		# Estimate MSE
+		# mse = F.mse_loss(pred_warped_m, gt, reduction='none')
+
+		# eps = 1e-12
+		# elem_ratio = mse.numel() / valid.numel()
+		# mse = (mse * valid.float()).sum() / (valid.float().sum()*elem_ratio + eps)
+		loss = self.l1loss(gt, pred_warped_m)
+		return loss
+
+def get_gaussian_kernel(sd, ksz=None):
+    """ Returns a 2D Gaussian kernel with standard deviation sd """
+    if ksz is None:
+        ksz = int(4 * sd + 1)
+
+    assert ksz % 2 == 1
+    K = gauss_2d(ksz, sd, (0.0, 0.0), density=True)
+    K = K / K.sum()
+    return K.unsqueeze(0), 
+
+def gauss_2d(sz, sigma, center, end_pad=(0, 0), density=False):
+    """ Returns a 2-D Gaussian """
+    if isinstance(sigma, (float, int)):
+        sigma = (sigma, sigma)
+    if isinstance(sz, int):
+        sz = (sz, sz)
+
+    if isinstance(center, (list, tuple)):
+        center = torch.tensor(center).view(1, 2)
+
+    return gauss_1d(sz[0], sigma[0], center[:, 0], end_pad[0], density).reshape(center.shape[0], 1, -1) * \
+           gauss_1d(sz[1], sigma[1], center[:, 1], end_pad[1], density).reshape(center.shape[0], -1, 1)
+
+def gauss_1d(sz, sigma, center, end_pad=0, density=False):
+    """ Returns a 1-D Gaussian """
+    k = torch.arange(-(sz-1)/2, (sz+1)/2 + end_pad).reshape(1, -1)
+    gauss = torch.exp(-1.0/(2*sigma**2) * (k - center.reshape(-1, 1))**2)
+    if density:
+        gauss /= math.sqrt(2*math.pi) * sigma
+    return gauss
+
+def warp(feat, flow, mode='bilinear', padding_mode='zeros'):
+    """
+    warp an image/tensor (im2) back to im1, according to the optical flow im1 --> im2
+    input flow must be in format (x, y) at every pixel
+    feat: [B, C, H, W] (im2)
+    flow: [B, 2, H, W] flow (x, y)
+    """
+    B, C, H, W = feat.size()
+
+    # mesh grid
+    rowv, colv = torch.meshgrid([torch.arange(0.5, H + 0.5, device=feat.device),
+                                 torch.arange(0.5, W + 0.5, device=feat.device)])
+    grid = torch.stack((colv, rowv), dim=0).unsqueeze(0).float()
+    grid = grid + flow
+
+    # scale grid to [-1,1]
+    grid_norm_c = 2.0 * grid[:, 0] / W - 1.0
+    grid_norm_r = 2.0 * grid[:, 1] / H - 1.0
+
+    grid_norm = torch.stack((grid_norm_c, grid_norm_r), dim=1)
+
+    grid_norm = grid_norm.permute(0, 2, 3, 1)
+
+    output = F.grid_sample(feat, grid_norm, mode=mode, padding_mode=padding_mode)
+
+    return output
+
+def apply_kernel(im, ksz, kernel):
+    """ apply the provided kernel on input image """
+    shape = im.shape
+    im = im.view(-1, 1, *im.shape[-2:])
+
+    pad = [ksz // 2, ksz // 2, ksz // 2, ksz // 2]
+    im = F.pad(im, pad, mode='reflect')
+    im_out = F.conv2d(im, kernel).view(shape)
+    return im_out
+
+def match_colors(im_ref, im_q, im_test, ksz, gauss_kernel):
+    """ Estimates a color transformation matrix between im_ref and im_q. Applies the estimated transformation to
+        im_test
+    """
+    gauss_kernel = gauss_kernel.to(im_ref.device)
+    bi = 5
+
+    # Apply Gaussian smoothing
+    im_ref_mean = apply_kernel(im_ref, ksz, gauss_kernel)[:, :, bi:-bi, bi:-bi].contiguous()
+    im_q_mean = apply_kernel(im_q, ksz, gauss_kernel)[:, :, bi:-bi, bi:-bi].contiguous()
+
+    im_ref_mean_re = im_ref_mean.view(*im_ref_mean.shape[:2], -1)
+    im_q_mean_re = im_q_mean.view(*im_q_mean.shape[:2], -1)
+
+    # Estimate color transformation matrix by minimizing the least squares error
+    c_mat_all = []
+    for ir, iq in zip(im_ref_mean_re, im_q_mean_re):
+        c = torch.lstsq(ir.t(), iq.t())
+        c = c.solution[:3]
+        c_mat_all.append(c)
+
+    c_mat = torch.stack(c_mat_all, dim=0)
+    im_q_mean_conv = torch.matmul(im_q_mean_re.permute(0, 2, 1), c_mat).permute(0, 2, 1)
+    im_q_mean_conv = im_q_mean_conv.view(im_q_mean.shape)
+
+    err = ((im_q_mean_conv - im_ref_mean) * 255.0).norm(dim=1)
+
+    thresh = 20
+
+    # If error is larger than a threshold, ignore these pixels
+    valid = err < thresh
+
+    pad = (im_q.shape[-1] - valid.shape[-1]) // 2
+    pad = [pad, pad, pad, pad]
+    valid = F.pad(valid, pad)
+
+    upsample_factor = im_test.shape[-1] / valid.shape[-1]
+    valid = F.interpolate(valid.unsqueeze(1).float(), scale_factor=upsample_factor, mode='bilinear')
+    valid = valid > 0.9
+
+    # Apply the transformation to test image
+    im_test_re = im_test.view(*im_test.shape[:2], -1)
+    im_t_conv = torch.matmul(im_test_re.permute(0, 2, 1), c_mat).permute(0, 2, 1)
+    im_t_conv = im_t_conv.view(im_test.shape)
+
+    return im_t_conv, valid
+
+class SpatialColorAlignment(nn.Module):
+    def __init__(self, alignment_net, sr_factor=4):
+        super().__init__()
+        self.sr_factor = sr_factor
+        self.alignment_net = alignment_net
+
+        self.gauss_kernel, self.ksz = get_gaussian_kernel(sd=1.5)
+
+    def to(self, device):
+        """ Move the network to device
+        args:
+            device - device to use. 'cpu' or 'cuda'
+        """
+        self.alignment_net.to(device)
+        self.gauss_kernel = self.gauss_kernel.to(device)
+
+    def forward(self, pred, gt):
+        # Estimate flow between the prediction and the ground truth
+        with torch.no_grad():
+            flow = self.alignment_net(pred / (pred.max() + 1e-6), gt / (gt.max() + 1e-6))
+
+        # Warp the prediction to the ground truth coordinates
+        pred_warped = warp(pred, flow)
+
+        # Warp the base input frame to the ground truth. This will be used to estimate the color transformation between
+        # the input and the ground truth
+        # sr_factor = self.sr_factor
+        # ds_factor = 1.0 / float(2.0 * sr_factor)
+        # flow_ds = F.interpolate(flow, scale_factor=ds_factor, mode='bilinear') * ds_factor
+
+        # burst_0 = burst_input[:, 0, [0, 1, 3]].contiguous()
+        # burst_0_warped = warp(burst_0, flow_ds)
+        # frame_gt_ds = F.interpolate(gt, scale_factor=ds_factor, mode='bilinear')
+
+        # # Match the colorspace between the prediction and ground truth
+        # pred_warped_m, valid = match_colors(frame_gt_ds, burst_0_warped, pred_warped, self.ksz, self.gauss_kernel)
+
+        return pred_warped

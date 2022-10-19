@@ -4,7 +4,7 @@ version:
 Author: Liu Xiaohui
 Date: 2022-09-16 12:39:08
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-09-18 15:27:03
+LastEditTime: 2022-10-16 20:08:53
 '''
 import os
 import torch
@@ -66,10 +66,10 @@ if __name__ == '__main__':
                 res = model.get_current_visuals()
 
                 if opt.save_imgs:
-                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'inter_rgb_out')
+                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'test_epoch_' + str(opt.load_iter), 'inter_rgb_out')
                     os.makedirs(save_dir_rgb, exist_ok=True)
-                    out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
-                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+                    out_img = np.array(res['derained_img'][0].cpu()).round().astype(np.uint8).transpose((1, 2, 0))
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + '_gt.png'), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
 
     for dataset in datasets:
         datasets[dataset].close()

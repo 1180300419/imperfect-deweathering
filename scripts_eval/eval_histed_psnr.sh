@@ -5,12 +5,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 12:39:08
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-09-17 16:32:17
+ # @LastEditTime: 2022-10-13 19:25:52
 ### 
 echo "Start to test the model...."
 
-name="unet"
-device="2"
+name="unet-4resblocks-2e-4_rainaug"
+device="1"
 
 python test_hist.py \
     --dataset_name GTRAIN\

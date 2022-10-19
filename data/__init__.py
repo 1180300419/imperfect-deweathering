@@ -1,3 +1,11 @@
+'''
+Descripttion: 
+version: 
+Author: Liu Xiaohui
+Date: 2022-09-27 12:50:49
+LastEditors: Liu Xiaohui
+LastEditTime: 2022-10-16 16:35:17
+'''
 import importlib
 import torch.utils.data
 from data.base_dataset import BaseDataset
@@ -40,7 +48,7 @@ class CustomDatasetDataLoader():
             shuffle=opt.shuffle and 'train' in split,
             num_workers=int(opt.num_dataloader), 
             drop_last=opt.drop_last)
-
+# batch_size=opt.batch_size if 'train' in split else 1,
     def load_data(self):
         return self
 

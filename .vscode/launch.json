@@ -1,0 +1,49 @@
+{
+    # // 使用 IntelliSense 了解相关属性。 
+    # // 悬停以查看现有属性的描述。
+    # // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+    
+
+    
+        {
+            "name": "detr",
+            "type": "python",
+            "request": "launch",
+            "cwd": "/home/user/code/derain/derain/scripts_eval/",
+            "program": "/home/user/code/derain/derain/test.py",
+            "args": [
+                "--dataset_name=GTRAINVAL",
+                "--model=unetdwt",
+                "--name=dwt1",
+                "--load_iter=1",
+                "--calc_metrics=True",
+                "--save_imgs=True",
+                "--gpu_ids=1"
+                    ],
+            "console": "integratedTerminal"
+        }
+        
+        
+    ]
+}
+
+# // python train.py \
+# //         --dataset_name GTRAINVAL\
+# //         --name $name\
+# //         --dataroot ''\
+# //         --split 'train'\
+# //         --batch_size 8\
+# //         --patch_size 256\
+# //         --model  unetdwt\
+# //         --niter 20\
+# //         --lr_policy 'warmup'\
+# //         --lr 2e-4\
+# //         --min_lr 1e-6\
+# //         --warmup_niter 4\
+# //         --save_imgs True\
+# //         --print_freq 100\
+# //         --calc_metrics True\
+# //         --gpu_ids 0,1\
+# //         -j 4  | tee $LOG  

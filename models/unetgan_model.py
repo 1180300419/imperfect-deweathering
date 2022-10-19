@@ -59,6 +59,7 @@ class UNETGANModel(BaseModel):
 		disnet = UNetDiscriminatorSN(num_in_ch=3, num_feat=64, skip_connection=True)
 
 		self.netUNET = N.init_net(unet, opt.init_type, opt.init_gain, opt.gpu_ids)
+		self.load_network_path(self.netUNET, '/home/user/code/derain/checkpoints/gt-rain-unet/UNET_model_19.pth')
 		self.netD = N.init_net(disnet, opt.init_type, opt.init_gain, opt.gpu_ids)
 
 		if self.isTrain:
@@ -90,6 +91,7 @@ class UNETGANModel(BaseModel):
 			if opt.vgg19_loss_weight > 0:
 				self.critrionVGG19 = N.init_net(L.VGGLoss(), gpu_ids=opt.gpu_ids)
 			if opt.gan_loss_weight > 0:
+				# import pdb; pdb.set_trace()
 				self.criterionGAN = N.init_net(L.GANLoss(opt.gan_type), gpu_ids=opt.gpu_ids)
 
 	def set_input(self, input):

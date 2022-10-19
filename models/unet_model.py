@@ -1,3 +1,4 @@
+from cmath import nan
 from email.policy import default
 import torch.nn as nn
 from torch.nn import init
@@ -9,6 +10,7 @@ from . import BaseModel as BaseModel
 from . import losses as L
 from skimage import exposure
 from util.util import rgbten2ycbcrten
+from alignment.pwcnet import PWCNet
 
 
 class UNETModel(BaseModel):
@@ -16,7 +18,7 @@ class UNETModel(BaseModel):
 	def modify_commandline_options(parser, is_train=True):
 		parser.add_argument('--data_section', type=str, default='-1-1')
 		parser.add_argument('--ngf', type=int, default=64)
-		parser.add_argument('--n_blocks', type=int, default=9)
+		parser.add_argument('--n_blocks', type=int, default=4)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
 		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
@@ -25,9 +27,13 @@ class UNETModel(BaseModel):
 		parser.add_argument('--hist_matched_weight', type=float, default=0.0)
 
 		parser.add_argument('--gradient_loss_weight', type=float, default=0.0)
-		parser.add_argument('--laplacian_pyramid_weight', type=float, default=0.05)
+		parser.add_argument('--laplacian_pyramid_weight', type=float, default=0.0)
+
+		parser.add_argument('--after_gcm_loss_weight', type=float, default=0.0)  # 添加经过GCM之后的模块
+		parser.add_argument('--aligned_l1_loss_weight', type=float, default=0.0)  # 经过颜色、空间对齐的L1 Loss
 
 		parser.add_argument('--test_internet', type=bool, default=False)
+
 		return parser
 
 	def __init__(self, opt):
@@ -45,16 +51,25 @@ class UNETModel(BaseModel):
 		if opt.hist_matched_weight > 0:
 			self.loss_names.append('UNET_HISTED')
 		if opt.gradient_loss_weight > 0:
-			self.loss_names.append('UNET_GRADIENT')
+			self.loss_names.append('UNET_GRADIENT') 
 		if opt.laplacian_pyramid_weight > 0:
 			self.loss_names.append('UNET_LAPLACIAN')
+		if opt.after_gcm_loss_weight > 0:
+			self.loss_names.append('UNET_GCMLOSS')
+		if opt.aligned_l1_loss_weight > 0:
+			self.loss_names.append('UNET_ALIGNEDL1')
 
 		if self.opt.test_internet:
 			self.visual_names = ['rainy_img', 'derained_img']
 		else:
 			self.visual_names = ['rainy_img', 'clean_img', 'derained_img']
-		self.model_names = ['UNET']
-		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer]
+
+		if self.isTrain:
+			self.model_names = ['UNET', 'GCM']
+		else:
+			self.model_names = ['UNET']
+
+		self.optimizer_names = ['UNET_optimizer_%s' % opt.optimizer, 'GCM_optimizer_%s' % opt.optimizer]
 
 		unet = UNET(
 				ngf=opt.ngf,
@@ -62,7 +77,11 @@ class UNETModel(BaseModel):
 				norm_layer_type=opt.norm_layer_type,
 				activation_func=torch.nn.LeakyReLU(negative_slope=0.10, inplace=True),
 				upsample_mode=opt.upsample_mode)
+
+		gcm = N.GCMModel()		
+		# gcm = N.GCMModel()	
 		self.netUNET = N.init_net(unet, opt.init_type, opt.init_gain, opt.gpu_ids)
+		self.netGCM = N.init_net(gcm, opt.init_type, opt.init_gain, opt.gpu_ids)
 
 		if self.isTrain:
 			key_name_list = ['offset', 'modulator']
@@ -80,7 +99,14 @@ class UNETModel(BaseModel):
 				lr=opt.lr,
 				betas=(0.9, 0.999),
 				eps=1e-8)
-			self.optimizers = [self.optimizer_UNET]
+			
+			self.optimizer_GCM = optim.Adam(
+				self.netGCM.parameters(),
+				lr=opt.lr,
+				betas=(0.9, 0.99),
+				eps=1e-8)
+
+			self.optimizers = [self.optimizer_UNET, self.optimizer_GCM]
 
 			if self.opt.l1_loss_weight > 0:
 				self.criterionL1 = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
@@ -94,6 +120,15 @@ class UNETModel(BaseModel):
 			if opt.laplacian_pyramid_weight > 0:
 				self.criterionLaplacian = N.init_net(L.LapPyrLoss(num_levels=3, lf_mode='ssim', hf_mode='cb', reduction='mean'), gpu_ids=opt.gpu_ids)
 
+			if opt.after_gcm_loss_weight > 0:
+				self.criterionAFTERGCM = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
+			
+			if opt.aligned_l1_loss_weight > 0:
+				# backbone
+				alignment_net = PWCNet(load_pretrained=True,
+							weights_path='../ckpt/pwcnet-network-default.pth')
+				self.criterionAlignedL1= N.init_net(L.AlignedL1(alignment_net))
+	
 	def set_input(self, input):
 		self.rainy_img = input['rainy_img'].to(self.device)
 		if not self.opt.test_internet:
@@ -101,7 +136,13 @@ class UNETModel(BaseModel):
 		self.name = input['file_name']
 
 	def forward(self):
-		self.derained_img = self.netUNET(self.rainy_img)
+		if self.isTrain:
+			self.derained_img = self.netUNET(self.rainy_img)
+			self.after_gcm_derained_img = self.netGCM(self.derained_img, self.clean_img)
+		else:
+			# self.derained_img = self.rainy_img
+			# for i in range(3):
+			self.derained_img = self.netUNET(self.rainy_img)
 
 	def backward(self):
 
@@ -140,23 +181,35 @@ class UNETModel(BaseModel):
 			self.loss_UNET_GRADIENT = self.criterionGradient(derained_ycbcr[:, 1:, ...], clean_ycbcr[:, 1:, ...]).mean()
 			self.loss_Total += self.opt.gradient_loss_weight * self.loss_UNET_GRADIENT
 
+		if self.opt.after_gcm_loss_weight > 0:
+			self.loss_UNET_GCMLOSS = self.criterionAFTERGCM(self.after_gcm_derained_img, self.clean_img).mean()
+			self.loss_Total += self.opt.after_gcm_loss_weight * self.loss_UNET_GCMLOSS
+
+		if self.opt.aligned_l1_loss_weight > 0:
+			self.loss_UNET_ALIGNEDL1 = self.criterionAlignedL1(self.derained_img, self.clean_img)
+			self.loss_Total += self.opt.aligned_l1_loss_weight * self.loss_UNET_ALIGNEDL1
+
 		self.loss_Total.backward()
 
 	def optimize_parameters(self):
 		self.forward()
 		self.optimizer_UNET.zero_grad()
+		self.optimizer_GCM.zero_grad()
 		self.backward()
 		torch.nn.utils.clip_grad_norm_(self.netUNET.parameters(), 0.1)
+		torch.nn.utils.clip_grad_norm_(self.netGCM.parameters(), 0.1)
 		self.optimizer_UNET.step()
+		self.optimizer_GCM.step()
 
 	def forward_x8(self):
 		pass
 
 	def update_before_iter(self):
 		self.optimizer_UNET.zero_grad()
+		self.optimizer_GCM.zero_grad()
 		self.optimizer_UNET.step()
+		self.optimizer_GCM.step()
 		self.update_learning_rate()
-
 
 class ResNetModified(nn.Module):
 	"""
@@ -294,6 +347,7 @@ class ResNetModified(nn.Module):
 
 		# Return multiple final conv results
 		return final_out
+
 
 class UNET(nn.Module):   
 	def __init__(self, ngf=64, n_blocks=9, norm_layer_type='batch',

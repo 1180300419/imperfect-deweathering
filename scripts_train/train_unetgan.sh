@@ -6,12 +6,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 10:40:30
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-09-16 13:33:36
+ # @LastEditTime: 2022-09-27 15:23:08
 ### 
 
 echo "Start to train the model..."
 
-name="unet-gan"
+name="resume-unet-gan"
 
 build_dir="../checkpoints/"$name
 
@@ -30,9 +30,9 @@ python train.py \
         --batch_size 8\
         --patch_size 256\
         --model  unetgan\
-        --niter 20\
-        --lr_policy 'warmup'\
-        --lr 1e-4\
+        --niter 6\
+        --lr_policy 'cosine'\
+        --lr 1e-5\
         --min_lr 1e-6\
         --warmup_niter 4\
         --save_imgs True\

@@ -1,3 +1,11 @@
+'''
+Descripttion: 
+version: 
+Author: Liu Xiaohui
+Date: 2022-09-27 12:50:49
+LastEditors: Liu Xiaohui
+LastEditTime: 2022-10-16 17:19:25
+'''
 import numpy as np
 from os.path import join
 from tensorboardX import SummaryWriter
@@ -40,7 +48,7 @@ class Visualizer():
     def display_current_results(self, phase, visuals, iters):
         for k, v in visuals.items():
             v = v.cpu()
-            self.writer.add_image('%s/%s'%(phase, k), v[0]/255, iters)
+            self.writer.add_image('%s/%s'%(phase, k), v[0]/255., iters)
         self.writer.flush()
 
     @write_until_success

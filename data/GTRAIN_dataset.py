@@ -65,7 +65,8 @@ class GTRAINDataset(BaseDataset):
         # rain mix 
         rainy_img = self.rainy_imgs[index]  # C * H * W
         clean_img = self.clean_imgs[index]
-        # rainy_img, clean_img = rain_aug(rainy_img, clean_img, self.rain_mask_dir, zoom_min=self.zoom_min, zoom_max=self.zoom_max)
+        if random.randint(1, 10) > 4:
+            rainy_img, clean_img = rain_aug(rainy_img, clean_img, self.rain_mask_dir, zoom_min=self.zoom_min, zoom_max=self.zoom_max)
 
         # Random rotation
         angle = np.random.normal(0, self.sigma)
@@ -122,7 +123,7 @@ class GTRAINDataset(BaseDataset):
     def _getitem_test(self, index):
         rainy_img = self.rainy_imgs[index]
         clean_img = self.clean_imgs[index]
-        h,w = rainy_img.shape[-2:]
+        h, w = rainy_img.shape[-2:]
 
         rainy_img = np.float32(rainy_img / 255.)
         clean_img = np.float32(clean_img / 255.)
@@ -133,8 +134,8 @@ class GTRAINDataset(BaseDataset):
             'rainy_img': rainy_img * 2 - 1,
             'clean_img': clean_img * 2 - 1,
             'file_name': self.names[index]
-        }   
-
+        }  
+      
     def _get_image_dir(self, root, split):
         # 获取所有有雨图片以及对应无雨图片的路径，并且获取所有的有雨图片的名字
         # 返回有雨图片的名字，和与之对应的有雨图片以及无雨图片

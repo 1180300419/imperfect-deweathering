@@ -4,7 +4,7 @@ version:
 Author: Liu Xiaohui
 Date: 2022-09-16 12:39:08
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-09-19 11:21:05
+LastEditTime: 2022-10-16 17:32:07
 '''
 import os
 import torch
@@ -73,32 +73,36 @@ if __name__ == '__main__':
                 torch.cuda.synchronize()
                 time_val += time.time() - time_val_start
                 res = model.get_current_visuals()
-
+                
                 if opt.calc_metrics:
                     
                     derained = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
                     clean = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0)) / 255.
 
-                    clean = exposure.match_histograms(clean, derained, multichannel=True)
-                    # cv2.imwrite()
-                    clean_ten = torch.from_numpy(clean.transpose(2, 0, 1)).unsqueeze(0).to(opt.gpu_ids[0])
-
-                    lpipses[i] = calc_lpips(clean_ten.float(), res['derained_img'], loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
+                    derained = exposure.match_histograms(derained, clean, multichannel=True)
+                    derained_ten = torch.from_numpy(derained.transpose(2, 0, 1)).unsqueeze(0).to(opt.gpu_ids[0])
+                    clean_histed = exposure.match_histograms(clean, derained, multichannel=True)
+                    # print(res['clean_img'].shape, derained_ten.shape)
                     psnr[i] = calc_psnr(clean, derained, data_range=1.)
                     ssim[i] = calc_ssim(clean, derained, multichannel=True)
+                    lpipses[i] = calc_lpips(res['clean_img'], derained_ten.float(), loss_fn_alex_1, 'cuda:' + str(opt.gpu_ids[0]))
                     
-
+                    
                 if opt.save_imgs:
-                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'epoch_' + str(opt.load_iter), 'rgb_out', data['file_name'][0][:-17])
-                    save_dir_histed_rgb = os.path.join('../checkpoints', opt.name, 'epoch_' + str(opt.load_iter), 'histed_GT', data['file_name'][0][:-17])
+                    save_dir_rgb = os.path.join('../checkpoints', opt.name, 'test_epoch_' + str(opt.load_iter), 'rgb_out', data['file_name'][0][:-17])
                     os.makedirs(save_dir_rgb, exist_ok=True)
-                    os.makedirs(save_dir_histed_rgb, exist_ok=True)
+
                     out_img = np.array(res['derained_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
-                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-                    cv2.imwrite(os.path.join(save_dir_histed_rgb, data['file_name'][0]), cv2.cvtColor((clean * 255).astype(np.uint8), cv2.COLOR_RGB2BGR))
-                    # cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0]), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-
-
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'd.png'), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+                    rainy_img = np.array(res['rainy_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'r.png'), cv2.cvtColor(rainy_img, cv2.COLOR_RGB2BGR))
+                    clean_img = np.array(res['clean_img'][0].cpu()).astype(np.uint8).transpose((1, 2, 0))
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'c.png'), cv2.cvtColor(clean_img, cv2.COLOR_RGB2BGR))
+                    # print(derained.shape)
+                    derained = (derained * 255).astype(np.uint8)
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'h.png'), cv2.cvtColor(derained, cv2.COLOR_RGB2BGR))
+                    clean_histed = (clean_histed * 255).astype(np.uint8)
+                    cv2.imwrite(os.path.join(save_dir_rgb, data['file_name'][0][:-4] + 'ch.png'), cv2.cvtColor(clean_histed, cv2.COLOR_RGB2BGR))
             avg_psnr_rgb = '%.2f'%np.mean(psnr)
             avg_ssim_rgb = '%.4f'%np.mean(ssim)
             avg_lpips_rgb = '%.4f'%np.mean(lpipses)
