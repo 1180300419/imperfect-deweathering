@@ -5,16 +5,16 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 12:39:08
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-10-19 10:20:30
+ # @LastEditTime: 2022-10-19 19:03:54
 ### 
 echo "Start to test the model...."
 
-name="align"
-device="0"
+name="rain-varient-loss"
+device="1"
 
 python test.py \
     --dataset_name GTRAINVAL\
-    --model alignednet\
+    --model gtrain\
     --name $name\
     --load_iter 20\
     --calc_metrics True\

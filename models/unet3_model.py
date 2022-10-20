@@ -13,6 +13,7 @@ from util.util import rgbten2ycbcrten
 
 # 仅使用derained作为GCMModel的输入，
 # 去雨网络和GCM一起进行学习，即去雨网络的输出不detach，直接输入进GCM网络
+# 去雨网络添加guided filter进行约束，后面加上GCM验证是否可以进行颜色转换
 class UNET3Model(BaseModel):
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
@@ -21,7 +22,7 @@ class UNET3Model(BaseModel):
 		parser.add_argument('--n_blocks', type=int, default=4)
 		parser.add_argument('--norm_layer_type', type=str, default='batch')
 		parser.add_argument('--upsample_mode', type=str, default='bilinear')
-		parser.add_argument('--l1_loss_weight', type=float, default=0.1)
+		parser.add_argument('--l1_loss_weight', type=float, default=0.0)
 		parser.add_argument('--ssim_loss_weight', type=float, default=1.0)
 		parser.add_argument('--vgg19_loss_weight', type=float, default=0.0)
 		parser.add_argument('--hist_matched_weight', type=float, default=0.0)
@@ -29,7 +30,10 @@ class UNET3Model(BaseModel):
 		parser.add_argument('--gradient_loss_weight', type=float, default=0.0)
 		parser.add_argument('--laplacian_pyramid_weight', type=float, default=0.0)
 
-		parser.add_argument('--after_gcm_loss_weight', type=float, default=1.0)  # 添加经过GCM之后的模块
+		parser.add_argument('--detail_loss_weight', type=float, default=1.0)  # guided filter 
+		parser.add_argument('--color_loss_weight', type=float, default=0.0)		# guided filter之后添加颜色loss
+
+		parser.add_argument('--after_gcm_loss_weight', type=float, default=0.0)  # 添加经过GCM之后的模块
 
 		parser.add_argument('--test_internet', type=bool, default=False)
 
@@ -53,6 +57,12 @@ class UNET3Model(BaseModel):
 			self.loss_names.append('UNET_GRADIENT') 
 		if opt.laplacian_pyramid_weight > 0:
 			self.loss_names.append('UNET_LAPLACIAN')
+
+		if self.opt.detail_loss_weight > 0:
+			self.loss_names.append('UNET_detail')
+		if self.opt.color_loss_weight > 0:
+			self.loss_names.append('UNET_color')
+
 		if opt.after_gcm_loss_weight > 0:
 			self.loss_names.append('UNET_GCMLOSS')
 
@@ -120,6 +130,11 @@ class UNET3Model(BaseModel):
 			if opt.laplacian_pyramid_weight > 0:
 				self.criterionLaplacian = N.init_net(L.LapPyrLoss(num_levels=3, lf_mode='ssim', hf_mode='cb', reduction='mean'), gpu_ids=opt.gpu_ids)
 
+			if opt.detail_loss_weight > 0:
+				self.criterionDetail = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
+			if opt.color_loss_weight > 0:
+				self.criterionColor = N.init_net(nn.L1Loss, gpu_ids=opt.gpu_ids)
+
 			if opt.after_gcm_loss_weight > 0:
 				self.criterionAFTERGCM = N.init_net(nn.L1Loss(), gpu_ids=opt.gpu_ids)
 
@@ -131,7 +146,7 @@ class UNET3Model(BaseModel):
 
 	def forward(self):
 		if self.isTrain:
-			self.derained_img = self.netUNET(self.rainy_img)
+			self.derained_img, self.detail_out, self.color_out = self.netUNET(self.rainy_img, self.clean_img)
 			# derained_img = self.derained_img.clone().detach()
 			self.after_gcm_derained_img = self.netGCM(self.derained_img, self.clean_img)
 		else:
@@ -174,6 +189,13 @@ class UNET3Model(BaseModel):
 		if self.opt.gradient_loss_weight > 0:
 			self.loss_UNET_GRADIENT = self.criterionGradient(derained_ycbcr[:, 1:, ...], clean_ycbcr[:, 1:, ...]).mean()
 			self.loss_Total += self.opt.gradient_loss_weight * self.loss_UNET_GRADIENT
+
+		if self.opt.detail_loss_weight > 0:
+			self.loss_UNET_detail = self.criterionDetail(self.detail_out, self.clean_img).mean()
+			self.loss_Total += self.opt.detail_loss_weight * self.loss_UNET_detail
+		if self.opt.color_loss_weight > 0:
+			self.loss_UNET_color = self.criterionColor(self.color_out, self.clean_img).mean()
+			self.loss_Total += self.opt.color_loss_weight * self.loss_UNET_color
 
 		if self.opt.after_gcm_loss_weight > 0:
 			self.loss_UNET_GCMLOSS = self.criterionAFTERGCM(self.after_gcm_derained_img, self.clean_img).mean()
@@ -361,9 +383,14 @@ class UNET(nn.Module):
 			use_dropout=False, n_blocks=n_blocks, 
 			padding_type='reflect',
 			upsample_mode=upsample_mode)
+		self.guide_filter = N.GuidedFilter(64)
 
-	def forward(self, x, res=False):
-		out_img = self.resnet(x)
-		if res:
-			out_img += x
-		return out_img
+	def forward(self, x, clean=None):
+		if clean is None:
+			out_img = self.resnet(x)
+			return out_img
+		else:
+			out_img = self.resnet(x)
+			detail_out = self.guide_filter(out_img, clean)
+			color_out = self.guide_filter(clean, out_img)
+			return out_img, detail_out, color_out

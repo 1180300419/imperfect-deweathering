@@ -6,12 +6,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 10:40:30
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-10-12 12:48:23
+ # @LastEditTime: 2022-10-20 15:00:18
 ### 
 
 echo "Start to train the model..."
 
-name="gt-rain-1"
+name="gcm-guidedfilter1s"
 
 build_dir="../checkpoints/"$name
 
@@ -29,7 +29,7 @@ python train.py \
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
-        --model  unet\
+        --model  unet3\
         --niter 20\
         --lr_policy 'warmup'\
         --lr 2e-4\

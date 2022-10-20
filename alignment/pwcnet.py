@@ -237,13 +237,13 @@ class PWCNet(torch.nn.Module):
         self.net = Network()
         self.rgb2bgr = rgb2bgr
 
-        # if load_pretrained:
-        #     if weights_path is None:
-        #         raise Exception
-        #     else:
-        #         weights_dict = torch.load(weights_path)
-        #         self.net.load_state_dict({strKey.replace('module', 'net'): tenWeight for strKey, tenWeight
-        #                                   in weights_dict.items()})
+        if load_pretrained:
+            if weights_path is None:
+                raise Exception
+            else:
+                weights_dict = torch.load(weights_path)
+                self.net.load_state_dict({strKey.replace('module', 'net'): tenWeight for strKey, tenWeight
+                                          in weights_dict.items()})
 
     def forward(self, source_img, target_img):
         assert (source_img.shape[-1] == target_img.shape[-1])

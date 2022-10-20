@@ -4,13 +4,13 @@ version:
 Author: Liu Xiaohui
 Date: 2022-10-16 20:11:59
 LastEditors: Liu Xiaohui
-LastEditTime: 2022-10-16 20:21:01
+LastEditTime: 2022-10-19 13:15:08
 '''
 from logging import root
 import os
 import cv2
 
-
+# 将root_path下的图片裁剪成特定大小
 root_path = '/home/user/files/data_set/SPA-Dataset/Testing/Real_Internet/'
 
 for img in os.listdir(root_path):

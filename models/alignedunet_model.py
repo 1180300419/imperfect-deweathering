@@ -10,9 +10,9 @@ from . import BaseModel as BaseModel
 from . import losses as L
 from skimage import exposure
 from util.util import rgbten2ycbcrten
-from alignment.pwcnet import PWCNet
+from alignment.pwcnet import PWCNet, backwarp
 
-
+# 先将模型输出和GT对齐，之后计算各项Loss
 class ALIGNEDUNETModel(BaseModel):
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
@@ -137,7 +137,7 @@ class ALIGNEDUNETModel(BaseModel):
 
     def forward(self):
         if self.isTrain:
-            self.derained_img = self.netUNET(self.rainy_img)
+            self.derained_img = self.netUNET(self.rainy_img, self.clean_img)
             self.after_gcm_derained_img = self.netGCM(self.derained_img, self.clean_img)
         else:
             self.derained_img = self.rainy_img
@@ -378,11 +378,9 @@ class UNET(nn.Module):
             param.requires_grad=False
         self.pwcnet.eval()
 
-    def forward(self, x, res=False, clean=None):
+    def forward(self, x, clean=None):
         out_img = self.resnet(x)
-        if res:
-            out_img += x
         if clean is not None:
-            # with torch.no_grad:
-            out_img = self.pwcnet(out_img, clean)
+            flow = self.pwcnet(out_img, clean)
+            out_img = backwarp(out_img, flow)
         return out_img

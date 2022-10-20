@@ -1,10 +1,19 @@
+'''
+Descripttion: 
+version: 
+Author: Liu Xiaohui
+Date: 2022-10-17 23:17:23
+LastEditors: Liu Xiaohui
+LastEditTime: 2022-10-19 13:13:30
+'''
 import cv2
 import os
 import os.path as osp
 from matplotlib import rc_params
-
 import numpy as np
 
+
+# 将两个目录的图片合并成一张图片 
 l_dir = "../checkpoints/dwt/test_epoch_20/inter_rgb_out"
 r_dir = "../checkpoints/unet-4resblocks-2e-4_rainaug/test_epoch_20/inter_rgb_out"
 # r_dir = "../checkpoints/gt-rain/test_epoch_20/inter_rgb_out_4"

@@ -141,7 +141,7 @@ class BaseModel(ABC):
 
             net_state = net.state_dict()
             is_loaded = {n:False for n in net_state.keys()}
-            for name, param in state_dict['state_dict'].items():
+            for name, param in state_dict.items():
                 if name in net_state:
                     try:
                         net_state[name].copy_(param)
