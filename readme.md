@@ -18,6 +18,18 @@ Experiments are conducted with Restormer and RainRobust networks on GT-Rain-Snow
 
 <img src = "https://i.imgur.com/2mheOWr.png"> 
 
+## Datasets
+
+<details>
+<summary><b>GT-Rain dataset</b></summary>
+Download the dataset from [here](https://drive.google.com/drive/folders/1NSRl954QPcGIgoyJa_VjQwh_gEaHWPb8).
+</details>
+
+<details>
+<summary><b>WeatherStream dataset</b></summary>
+Download the dataset from [here](https://drive.google.com/drive/folders/12Z9rBSTs0PPNHLieyU2vnCTzR6fOFLrT).
+</details>
+
 ## Visualizations
 
 ### Qualitative testing results of the de-weathering models trained with GT-Rain-Snow dataset.
@@ -36,3 +48,8 @@ If you make use of our work, please cite our paper.
   year={2023}
 }
 ```
+
+## Acknowledgement
+
+- This repo is built upon the framework if [CycleGAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix), and we borrow some code from [GT-Rain](https://github.com/UCLA-VMG/GT-RAIN) and [Restormer](https://github.com/swz30/Restormer), thanks for their excellent work.
+
