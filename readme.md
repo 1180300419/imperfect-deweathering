@@ -11,4 +11,28 @@
 
 ## Network Architecture
 
-<img src = "assets/pipeline.pdf"> 
+<img src = "https://i.imgur.com/ILyYCuw.png"> 
+
+## Results
+Experiments are conducted with Restormer and RainRobust networks on GT-Rain-Snow and WeatherStream datasets, respectively.
+
+<img src = "https://i.imgur.com/2mheOWr.png"> 
+
+## Visualizations
+
+### Qualitative testing results of the de-weathering models trained with GT-Rain-Snow dataset.
+<img src = "https://i.imgur.com/BQfM8Di.png"> 
+
+### Qualitative testing results of the de-weathering models trained with WeatherStream dataset.
+<img src = "https://i.imgur.com/BQfM8Di.png"> 
+
+## Citation
+If you make use of our work, please cite our paper.
+```bibtex
+@article{liu2023learning,
+  title={Learning Real-World Image De-Weathering with Imperfect Supervision},
+  author={Liu, Xiaohui and Zhang, Zhilu and Wu, Xiaohe and Feng, Chaoyu and Wang, Xiaotao and LEI, LEI and Zuo, Wangmeng},
+  journal={arXiv preprint arXiv:2310.14958},
+  year={2023}
+}
+```
