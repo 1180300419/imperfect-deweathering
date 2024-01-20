@@ -302,6 +302,13 @@ def bgr2ycbcr(img, only_y=True):
 def bgrten2ycbcrten(img_ten, only_y=True):
     pass
 
+def rgb2gray(rgb_img):
+    rgb_img = rgb_img.transpose((1, 2, 0))
+    rgb_img = np.dot(rgb_img, [0.299, 0.587, 0.114])
+    h, w = rgb_img.shape
+    rgb_img_ret = rgb_img.reshape((-1, h, w))
+    return rgb_img_ret
+
 def gauss_kernel(size=5, device=torch.device('cpu'), channels=3):
     kernel = torch.tensor([[1.,  4.,  6.,  4., 1.],
                            [4., 16., 24., 16., 4.],
@@ -339,3 +346,20 @@ def upsample(x):
     x_up = torch.zeros(x.shape[0], x.shape[1], x.shape[2] * 2, x.shape[3] * 2, device=x.device)
     x_up[:, :, ::2, ::2] = x
     return conv_gauss(x_up, 4 * gauss_kernel(channels=x.shape[1], device=x.device))
+
+
+def crop_random(img_ten1, img_ten2, patch_size=224):
+    hh, ww = img_ten1.shape[-2:]
+    pw = random.randrange(0, ww - patch_size + 1)
+    ph = random.randrange(0, hh - patch_size + 1)
+    
+    img_ten1 = img_ten1[..., ph : ph + patch_size, pw : pw + patch_size]
+    img_ten2 = img_ten2[..., ph : ph + patch_size, pw : pw + patch_size]
+    return img_ten1, img_ten2
+            
+def crop_center(img_ten1, img_ten2, patch_size=224):
+    hh, ww = img_ten1.shape[-2:]
+    begin_h, begin_w = hh // 2 - patch_size // 2, ww // 2 - patch_size // 2
+    img_ten1 = img_ten1[..., begin_h : begin_h + patch_size, begin_w : begin_w + patch_size]
+    img_ten2 = img_ten2[..., begin_h : begin_h + patch_size, begin_w : begin_w + patch_size]
+    return img_ten1, img_ten2

@@ -7,8 +7,8 @@ from PIL import Image
 from functools import wraps
 import time
 
-cv2.setNumThreads(0)
-cv2.ocl.setUseOpenCL(False)
+# cv2.setNumThreads(0)
+# cv2.ocl.setUseOpenCL(False)
 
 class imlib():
     """

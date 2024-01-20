@@ -4,7 +4,7 @@ from email.policy import default
 import os
 import re
 
-from grpc import ssl_server_certificate_configuration
+# from grpc import ssl_server_certificate_configuration
 from util import util
 import torch
 import models
@@ -22,6 +22,7 @@ class BaseOptions():
     def initialize(self, parser):
         """Define the common options that are used in both training and test."""
         # data parameters
+        parser.add_argument('--input_frames', type=int, default=0)
         parser.add_argument('--dataroot', type=str, default='')
         parser.add_argument('--dataset_name', type=str, default=['eth'], nargs='+')
         parser.add_argument('--max_dataset_size', type=int, default=inf)
@@ -112,8 +113,10 @@ class BaseOptions():
         parser.add_argument('--self_ensemble', action='store_true', help='use self-ensemble method for test')
         parser.add_argument('--split', type=str, default='train')
 
-       
-
+        parser.add_argument('--train_dataset_size', type=str, default='all')   # 表示训练集使用多少数据量，
+        parser.add_argument('--val_dataset_size', type=str, default='all')  # 表示验证集使用多少数据量
+        parser.add_argument('--test_dataset_size', type=str, default='all')  # 表示测试使用多少数据量
+    
         self.initialized = True
         return parser
 

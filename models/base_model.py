@@ -47,7 +47,7 @@ class BaseModel(ABC):
         pass
 
     @abstractmethod
-    def optimize_parameters(self):
+    def optimize_parameters(self, epoch):
         pass
 
     def setup(self, opt=None):   #####
@@ -140,8 +140,10 @@ class BaseModel(ABC):
                 del state_dict._metadata
 
             net_state = net.state_dict()
+
             is_loaded = {n:False for n in net_state.keys()}
-            for name, param in state_dict.items():
+            # ['state_dict']
+            for name, param in state_dict['state_dict'].items():
                 if name in net_state:
                     try:
                         net_state[name].copy_(param)
@@ -164,6 +166,21 @@ class BaseModel(ABC):
                 print('All parameters are initialized using [%s]' % load_path)
 
             self.start_epoch = epoch
+    
+    def get_bare_model(self, net):
+        if isinstance(net, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
+            net = net.module
+        return net
+    
+    def model_ema(self, net_g, net_g_ema, decay=0.999):
+        net_g = self.get_bare_model(net_g)
+        net_g_ema = self.get_bare_model(net_g_ema)
+        net_g_params = dict(net_g.named_parameters())
+        net_g_ema_params = dict(net_g_ema.named_parameters())
+        for k in net_g_ema_params.keys():
+            # print(k)
+            # (net_g_ema_params[k].data.mul_(decay)).add_(net_g_params[k].data.mul_(1 - decay))
+            net_g_ema_params[k].data.mul_(decay).add_(net_g_params[k].data, alpha=1 - decay)
 
     def load_network_path(self, net, path):
         if isinstance(net, torch.nn.DataParallel):
@@ -197,6 +214,61 @@ class BaseModel(ABC):
         if mark:
             print('All parameters are initialized using [%s]' % path)
 
+    def load_network_path_depth(self, net, path):
+        if isinstance(net, torch.nn.DataParallel):
+            net = net.module
+        state_dict = torch.load(path, map_location=self.device)
+        print('loading the model from %s' % (path))
+        if hasattr(state_dict, '_metadata'):
+            del state_dict._metadata
+
+        net_state = net.state_dict()
+        is_loaded = {n:False for n in net_state.keys()}
+        load_dict = {}
+        for k, v in state_dict['model'].items():
+            if k.startswith('module.'):
+                k_ = k.replace('module.', '')
+                load_dict[k_] = v
+            else:
+                load_dict[k] = v
+        modified = {}  # backward compatibility to older naming of architecture blocks
+        for k, v in load_dict.items():
+            if k.startswith('adaptive_bins_layer.embedding_conv.'):
+                k_ = k.replace('adaptive_bins_layer.embedding_conv.',
+                            'adaptive_bins_layer.conv3x3.')
+                modified[k_] = v
+                # del load_dict[k]
+
+            elif k.startswith('adaptive_bins_layer.patch_transformer.embedding_encoder'):
+
+                k_ = k.replace('adaptive_bins_layer.patch_transformer.embedding_encoder',
+                            'adaptive_bins_layer.patch_transformer.embedding_convPxP')
+                modified[k_] = v
+                # del load_dict[k]
+            else:
+                modified[k] = v  # else keep the original        
+        for name, param in modified.items():
+            if name in net_state:
+                try:
+                    net_state[name].copy_(param)
+                    is_loaded[name] = True
+                except Exception:
+                    print('While copying the parameter named [%s], '
+                            'whose dimensions in the model are %s and '
+                            'whose dimensions in the checkpoint are %s.'
+                            % (name, list(net_state[name].shape),
+                                list(param.shape)))
+                    raise RuntimeError
+            else:
+                print('Saved parameter named [%s] is skipped' % name)
+        mark = True
+        for name in is_loaded:
+            if not is_loaded[name]:
+                print('Parameter named [%s] is randomly initialized' % name)
+                mark = False
+        if mark:
+            print('All parameters are initialized using [%s]' % path)
+            
     def save_optimizers(self, epoch):
         assert len(self.optimizers) == len(self.optimizer_names)
         for id, optimizer in enumerate(self.optimizers):

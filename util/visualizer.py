@@ -80,13 +80,13 @@ class Visualizer():
                 % (epoch, total_epoch, time_val, mean_lpips))
 
     @write_until_success
-    def print_kld(self, epoch, total_epoch, time_val, mean_kld):
-        self.writer.add_scalar('val/kld', mean_kld, epoch)
-        print('End of epoch %d / %d (Val) \t Time Taken: %.3f s \t KLD: %f'
-                % (epoch, total_epoch, time_val, mean_kld))
+    def print_test_folder(self, key, psnr, ssim, lpips):
+        print()
+        print(key)
+        print('PSNR: ', str(psnr))
+        print('SSIM: ', str(ssim))
+        print('LPIPS: ', str(lpips))
 
     @write_until_success
-    def print_m4(self, epoch, total_epoch, time_val, mean_M4):
-        self.writer.add_scalar('val/M4', mean_M4, epoch)
-        print('End of epoch %d / %d (Val) \t Time Taken: %.3f s \t M4: %f'
-                % (epoch, total_epoch, time_val, mean_M4))
+    def print_str(self, str):
+        print(str)

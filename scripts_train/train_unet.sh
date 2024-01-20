@@ -6,12 +6,12 @@
  # @Author: Liu Xiaohui
  # @Date: 2022-09-16 10:40:30
  # @LastEditors: Liu Xiaohui
- # @LastEditTime: 2022-10-20 15:00:18
+ # @LastEditTime: 2023-06-13 14:06:40
 ### 
 
 echo "Start to train the model..."
 
-name="gcm-guidedfilter1s"
+name="loss_0_1_ablation"
 
 build_dir="../checkpoints/"$name
 
@@ -23,13 +23,18 @@ LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
 
 
 python train.py \
-        --dataset_name GTRAINVAL\
+        --train_dataset_size 'all'\
+        --val_dataset_size '30'\
+        --test_dataset_size 'all'\
+        --input_frames 5\
+        --dataset_name MULGTWEA\
+        --init_type 'xavier'\
         --name $name\
         --dataroot ''\
         --split 'train'\
         --batch_size 8\
         --patch_size 256\
-        --model  unet3\
+        --model multiencgtrainselfsu\
         --niter 20\
         --lr_policy 'warmup'\
         --lr 2e-4\
@@ -38,9 +43,8 @@ python train.py \
         --save_imgs True\
         --print_freq 100\
         --calc_metrics True\
-        --gpu_ids 0,1\
+        --gpu_ids 5\
         -j 4  | tee $LOG  
-
 
 
 

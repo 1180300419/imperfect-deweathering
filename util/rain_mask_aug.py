@@ -212,13 +212,90 @@ def getRandRainLayer2(rain_mask_dir):
   rand_id2 = random.randint(4, 8)
   rainlayer_rand = getRainLayer2(rand_id1, rand_id2, rain_mask_dir)
   return rainlayer_rand
+
+# 获取长度为length的rain layer
+def getRandRainLayers(rain_mask_dir, length):
+  rainlayers = []
+  for i in range(length):
+    rand_id1 = random.randint(1, 165)
+    rand_id2 = random.randint(4, 8)
+    rainlayer_rand = getRainLayer2(rand_id1, rand_id2, rain_mask_dir)
+    rainlayers.append(rainlayer_rand)
+  return rainlayers
+
+def rain_aug_list(img_rainy_list, img_gt_list, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8, length=1):
+  img_rainy = img_rainy_list[0]
+  img_gt = img_gt_list[0]
   
-def rain_aug(img_rainy, img_gt, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
-  # print(img_rainy.shape)
-  # print(img_gt.shape)
   img_rainy = img_rainy.transpose(1, 2, 0)
   img_gt = img_gt.transpose(1, 2, 0)
-  # print('*' * 80)
+
+  img_rainy = (img_rainy.astype(np.float32)) / 255.0
+  img_gt = (img_gt.astype(np.float32)) / 255.0
+  img_rainy_ret = img_rainy
+  img_gt_ret = img_gt
+
+  rainlayers = getRandRainLayers(rain_mask_dir, length)  # 随机获得雨的mask
+  rainlayers_aug = []
+  min_height = 0
+  min_width = 0
+  flag = False
+  for rainlayer in rainlayers:
+    rainlayer_aug2 = augment_and_mix(rainlayer, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
+    rainlayers_aug.append(rainlayer_aug2)
+    if not flag:
+      min_height = rainlayer_aug2.shape[0]
+      min_width = rainlayer_aug2.shape[1]
+      flag = True
+    else:
+      min_height = min(min_height, rainlayer_aug2.shape[0])
+      min_width = min(min_width, rainlayer_aug2.shape[1])
+      
+  height = min(img_rainy.shape[0], min_height)
+  width = min(img_rainy.shape[1], min_width)
+  
+  cropper = RandomCrop(img_rainy.shape[:2], (height, width))
+  img_rainy_rets = []
+  img_gt_rets = []
+  
+  for i in range(length):
+    img_rainy = img_rainy_list[i]
+    img_gt = img_gt_list[i]
+    
+    img_rainy = img_rainy.transpose(1, 2, 0)
+    img_gt = img_gt.transpose(1, 2, 0)
+
+    img_rainy = (img_rainy.astype(np.float32)) / 255.0
+    img_gt = (img_gt.astype(np.float32)) / 255.0
+    img_rainy_ret = img_rainy
+    img_gt_ret = img_gt
+
+    # print(rainlayers_aug[i].shape[:2], height, width)
+    rainlayer_cropper = RandomCrop(rainlayers_aug[i].shape[:2], (height, width))
+    rainlayer_aug2_crop = rainlayer_cropper(rainlayers_aug[i])
+  
+    img_rainy_ret = cropper(img_rainy_ret)
+    img_gt_ret = cropper(img_gt_ret)
+    
+    if random.randint(1, 10) > 4:
+      img_rainy_ret = img_rainy_ret + rainlayer_aug2_crop - img_rainy_ret*rainlayer_aug2_crop
+      img_rainy_ret = np.clip(img_rainy_ret, 0.0, 1.0)
+      
+    img_rainy_ret = (img_rainy_ret * 255).astype(np.uint8)
+    img_gt_ret = (img_gt_ret * 255).astype(np.uint8)
+    
+    img_rainy_ret = img_rainy_ret.transpose(2, 0, 1)
+    img_gt_ret = img_gt_ret.transpose(2, 0, 1)
+    img_rainy_rets.append(img_rainy_ret)
+    img_gt_rets.append(img_gt_ret)
+    
+  return img_rainy_rets, img_gt_rets
+
+
+def rain_aug(img_rainy, img_gt, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
+  img_rainy = img_rainy.transpose(1, 2, 0)
+  img_gt = img_gt.transpose(1, 2, 0)
+
   img_rainy = (img_rainy.astype(np.float32)) / 255.0
   img_gt = (img_gt.astype(np.float32)) / 255.0
   img_rainy_ret = img_rainy
@@ -244,6 +321,174 @@ def rain_aug(img_rainy, img_gt, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
   img_gt_ret = img_gt_ret.transpose(2, 0, 1)
   return img_rainy_ret, img_gt_ret
 
+# 输入包含两张雨图，一张干净图，返回两张雨图，一张干净图
+def rain_aug1(img_rainy, img_rainy1, img_gt, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
+  
+  img_rainy = img_rainy.transpose(1, 2, 0)
+  img_rainy1 = img_rainy1.transpose(1, 2, 0)
+  img_gt = img_gt.transpose(1, 2, 0)
+  
+  img_rainy = (img_rainy.astype(np.float32)) / 255.0
+  img_rainy1 = (img_rainy1.astype(np.float32)) / 255.0
+  img_gt = (img_gt.astype(np.float32)) / 255.0
+  
+  img_rainy_ret = img_rainy
+  img_rainy1_ret = img_rainy1
+  img_gt_ret = img_gt
+
+  rainlayer_rand2 = getRandRainLayer2(rain_mask_dir)  # 随机获得雨的mask
+  rainlayer_aug2 = augment_and_mix(rainlayer_rand2, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
+
+  height = min(img_rainy.shape[0], rainlayer_aug2.shape[0])
+  width = min(img_rainy.shape[1], rainlayer_aug2.shape[1])
+  
+  cropper = RandomCrop(rainlayer_aug2.shape[:2], (height, width))
+  rainlayer_aug2_crop = cropper(rainlayer_aug2)
+  cropper = RandomCrop(img_rainy.shape[:2], (height, width))
+  img_rainy_ret = cropper(img_rainy_ret)
+  img_rainy1_ret = cropper(img_rainy1_ret)
+  img_gt_ret = cropper(img_gt_ret)
+  
+  img_rainy_ret = img_rainy_ret + rainlayer_aug2_crop - img_rainy_ret*rainlayer_aug2_crop
+  img_rainy1_ret = img_rainy1_ret + rainlayer_aug2_crop - img_rainy1_ret*rainlayer_aug2_crop
+  
+  img_rainy_ret = np.clip(img_rainy_ret, 0.0, 1.0)
+  img_rainy1_ret = np.clip(img_rainy1_ret, 0.0, 1.0)
+  img_rainy_ret = (img_rainy_ret * 255).astype(np.uint8)
+  img_rainy1_ret = (img_rainy1_ret * 255).astype(np.uint8)
+  img_gt_ret = (img_gt_ret * 255).astype(np.uint8)
+  
+  img_rainy_ret = img_rainy_ret.transpose(2, 0, 1)
+  img_rainy1_ret = img_rainy1_ret.transpose(2, 0, 1)
+  img_gt_ret = img_gt_ret.transpose(2, 0, 1)
+  return img_rainy_ret, img_rainy1_ret, img_gt_ret
+
+def rain_aug_depth(img_rainy, img_gt, img_depth, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
+  img_rainy = img_rainy.transpose(1, 2, 0)
+  img_gt = img_gt.transpose(1, 2, 0)
+  img_depth = img_depth.transpose(1, 2, 0)
+
+  img_rainy = (img_rainy.astype(np.float32)) / 255.0
+  img_gt = (img_gt.astype(np.float32)) / 255.0
+
+  img_rainy_ret = img_rainy
+  img_gt_ret = img_gt
+  img_depth_ret = img_depth
+
+  rainlayer_rand2 = getRandRainLayer2(rain_mask_dir)  # 随机获得雨的mask
+  rainlayer_aug2 = augment_and_mix(rainlayer_rand2, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
+
+  height = min(img_rainy.shape[0], rainlayer_aug2.shape[0])
+  width = min(img_rainy.shape[1], rainlayer_aug2.shape[1])
+  
+  cropper = RandomCrop(rainlayer_aug2.shape[:2], (height, width))
+  rainlayer_aug2_crop = cropper(rainlayer_aug2)
+  cropper = RandomCrop(img_rainy.shape[:2], (height, width))
+  img_rainy_ret = cropper(img_rainy_ret)
+  img_gt_ret = cropper(img_gt_ret)
+  img_depth_ret = cropper(img_depth_ret)
+
+  img_rainy_ret = img_rainy_ret + rainlayer_aug2_crop - img_rainy_ret*rainlayer_aug2_crop
+  img_rainy_ret = np.clip(img_rainy_ret, 0.0, 1.0)
+  img_rainy_ret = (img_rainy_ret * 255).astype(np.uint8)
+  img_gt_ret = (img_gt_ret * 255).astype(np.uint8)
+  
+  img_rainy_ret = img_rainy_ret.transpose(2, 0, 1)
+  img_gt_ret = img_gt_ret.transpose(2, 0, 1)
+  img_depth_ret = img_depth_ret.transpose(2, 0, 1)
+  return img_rainy_ret, img_gt_ret, img_depth_ret
+
+def rain_aug2(img_rainy, img_gt, img_rainy2, img_gt2, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
+  img_rainy = img_rainy.transpose(1, 2, 0)
+  img_gt = img_gt.transpose(1, 2, 0)
+  img_rainy2 = img_rainy2.transpose(1, 2, 0)
+  img_gt2 = img_gt2.transpose(1, 2, 0)
+  
+  img_rainy = (img_rainy.astype(np.float32)) / 255.0
+  img_gt = (img_gt.astype(np.float32)) / 255.0
+  img_rainy2 = (img_rainy2.astype(np.float32)) / 255.0
+  img_gt2 = (img_gt2.astype(np.float32)) / 255.0
+
+  img_rainy_ret = img_rainy
+  img_gt_ret = img_gt
+  img_rainy2_ret = img_rainy2
+  img_gt2_ret = img_gt2
+  
+  rainlayer_rand2 = getRandRainLayer2(rain_mask_dir)  # 随机获得雨的mask
+  rainlayer_aug2 = augment_and_mix(rainlayer_rand2, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
+
+  rainlayer_rand3 = getRandRainLayer2(rain_mask_dir)
+  rainlayer_aug3 = augment_and_mix(rainlayer_rand3, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
+  
+  height = min(img_rainy.shape[0], rainlayer_aug2.shape[0], rainlayer_aug3.shape[0])
+  width = min(img_rainy.shape[1], rainlayer_aug2.shape[1], rainlayer_aug3.shape[1])
+  
+  cropper = RandomCrop(rainlayer_aug2.shape[:2], (height, width))  # 对雨线层进行随机裁剪
+  rainlayer_aug2_crop = cropper(rainlayer_aug2)
+  cropper = RandomCrop(rainlayer_aug3.shape[:2], (height, width))
+  rainlayer_aug3_crop = cropper(rainlayer_aug3)
+  
+  cropper = RandomCrop(img_rainy.shape[:2], (height, width))  # 对图像层进行随机裁剪
+  img_rainy_ret = cropper(img_rainy_ret)
+  img_gt_ret = cropper(img_gt_ret)
+  
+  cropper = RandomCrop(img_rainy.shape[:2], (height, width))  # 对第二章图像进行随机裁剪
+  img_rainy2_ret = cropper(img_rainy2_ret)
+  img_gt2_ret = cropper(img_gt2_ret)
+  
+  img_rainy_ret = img_rainy_ret + rainlayer_aug2_crop - img_rainy_ret*rainlayer_aug2_crop
+  img_rainy_ret = np.clip(img_rainy_ret, 0.0, 1.0)
+  img_rainy_ret = (img_rainy_ret * 255).astype(np.uint8)
+  img_gt_ret = (img_gt_ret * 255).astype(np.uint8)
+  img_rainy_ret = img_rainy_ret.transpose(2, 0, 1)
+  img_gt_ret = img_gt_ret.transpose(2, 0, 1)
+  
+  img_rainy2_ret = img_rainy2_ret + rainlayer_aug3_crop - img_rainy2_ret * rainlayer_aug3_crop
+  img_rainy2_ret = np.clip(img_rainy2_ret, 0.0, 1.0)
+  img_rainy2_ret = (img_rainy2_ret * 255).astype(np.uint8)
+  img_gt2_ret = (img_gt2_ret * 255).astype(np.uint8)
+  img_rainy2_ret = img_rainy2_ret.transpose(2, 0, 1)
+  img_gt2_ret = img_gt2_ret.transpose(2, 0, 1)
+  
+  return img_rainy_ret, img_gt_ret, img_rainy2_ret, img_gt2_ret
+
+def rain_aug3(img_rainy, img_gt, img_mask, rain_mask_dir, zoom_min = 0.06, zoom_max = 1.8):
+	img_rainy = img_rainy.transpose(1, 2, 0)
+	img_gt = img_gt.transpose(1, 2, 0)
+	img_mask = img_mask.transpose(1, 2, 0)
+ 
+	img_rainy = (img_rainy.astype(np.float32)) / 255.0
+	img_gt = (img_gt.astype(np.float32)) / 255.0
+	img_mask = (img_mask.astype(np.float32)) / 255.0
+ 
+	img_rainy_ret = img_rainy
+	img_gt_ret = img_gt
+	img_mask_ret = img_mask
+ 
+	rainlayer_rand2 = getRandRainLayer2(rain_mask_dir)  # 随机获得雨的mask
+	rainlayer_aug2 = augment_and_mix(rainlayer_rand2, severity = 3, width = 3, depth = -1, zoom_min = zoom_min, zoom_max = zoom_max) * 1
+
+	height = min(img_rainy.shape[0], rainlayer_aug2.shape[0])
+	width = min(img_rainy.shape[1], rainlayer_aug2.shape[1])
+
+	cropper = RandomCrop(rainlayer_aug2.shape[:2], (height, width))
+	rainlayer_aug2_crop = cropper(rainlayer_aug2)
+	cropper = RandomCrop(img_rainy.shape[:2], (height, width))
+	img_rainy_ret = cropper(img_rainy_ret)
+	img_gt_ret = cropper(img_gt_ret)
+	img_mask_ret = cropper(img_mask_ret)
+	img_rainy_ret = img_rainy_ret + rainlayer_aug2_crop - img_rainy_ret*rainlayer_aug2_crop
+	img_rainy_ret = np.clip(img_rainy_ret, 0.0, 1.0)
+	img_rainy_ret = (img_rainy_ret * 255).astype(np.uint8)
+	img_gt_ret = (img_gt_ret * 255).astype(np.uint8)
+	img_mask_ret = (img_mask_ret * 255).astype(np.uint8)
+
+	img_rainy_ret = img_rainy_ret.transpose(2, 0, 1)
+	img_gt_ret = img_gt_ret.transpose(2, 0, 1)
+	img_mask_ret = img_mask_ret.transpose(2, 0, 1)
+ 
+	return img_rainy_ret, img_gt_ret, img_mask_ret
+
 def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1., zoom_min=0.06, zoom_max=1.8):
   """Perform AugMix augmentations and compute mixture.
   Args:
@@ -258,7 +503,7 @@ def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1., zoom_min=0.0
   """
   ws = np.float32(
       np.random.dirichlet([alpha] * width))
-  m = np.float32(np.random.beta(alpha, alpha))
+  m = np.float32(np.random.beta(alpha, alpha))    
 
   mix = np.zeros_like(image)
   for i in range(width):
@@ -274,7 +519,7 @@ def augment_and_mix(image, severity=3, width=3, depth=-1, alpha=1., zoom_min=0.0
     # Preprocessing commutes since all coefficients are convex
     mix += ws[i] * image_aug
     
-  max_ws = max(ws)
+  max_ws = max(ws)  
   rate = 1.0 / max_ws  
   
   mixed = max((1 - m), 0.7) * image + max(m, rate*0.5) * mix

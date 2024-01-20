@@ -65,6 +65,11 @@ def ssim(img1, img2, window_size=11, size_average=True):
 
 	return _ssim(img1, img2, window, window_size, channel, size_average)
 
+def normalize_batch(batch):
+	mean = batch.new_tensor([0.485, 0.456, 0.406]).view(-1, 1, 1)
+	std = batch.new_tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
+	return (batch - mean) / std
+
 class SSIMLoss(nn.Module):
 	def __init__(self, window_size=11, size_average=True):
 		super(SSIMLoss, self).__init__()
@@ -267,7 +272,7 @@ class SWDLoss(nn.Module):
 		super(SWDLoss, self).__init__()
 		self.add_module('vgg', VGG19())
 		self.criterion = SWD()
-		# self.SWD = SWDLocal()
+		# self.criterion = SWDLocal()
 
 	def forward(self, img1, img2, p=6):
 		x = normalize_batch(img1)
@@ -282,6 +287,34 @@ class SWDLoss(nn.Module):
 
 		return swd_loss * 8 / 100.0
 
+class SWDLocal(torch.nn.Module):
+    def __init__(self):
+        super(SWDLocal, self).__init__()
+        self.l1loss = torch.nn.L1Loss()
+        
+    def forward(self, true_samples, fake_samples, k):
+        N, C, H, W = true_samples.shape
+        num_projections = C // 2
+        true_samples = F.unfold(true_samples, kernel_size=(k, k), padding=0, stride=2)
+        fake_samples = F.unfold(fake_samples, kernel_size=(k, k), padding=0, stride=2)
+        
+        p = true_samples.shape[-1]
+        true_samples = true_samples.view(N, C, k, k, p).permute(0, 4, 1, 2, 3).contiguous()
+        true_samples = true_samples.view(N, p, C, k * k)
+        fake_samples = fake_samples.view(N, C, k, k, p).permute(0, 4, 1, 2, 3).contiguous()
+        fake_samples = fake_samples.view(N, p, C, k * k)
+        
+        projections = torch.from_numpy(np.random.normal(size=(num_projections, C)).astype(np.float32))
+        projections = torch.FloatTensor(projections).to(true_samples.device)
+        projections = F.normalize(projections, p=2, dim=1)
+        
+        projected_true = projections @ true_samples
+        projected_fake = projections @ fake_samples
+        
+        sorted_true, true_index = torch.sort(projected_true, dim=3)
+        sorted_fake, fake_index = torch.sort(projected_fake, dim=3)
+        return self.l1loss(sorted_true, sorted_fake).mean()
+    
 class VGGStyleDiscriminator160(nn.Module):
 
 	def __init__(self, num_in_ch=4, num_feat=64):
@@ -571,7 +604,7 @@ class SWD(nn.Module):
 		projections = torch.FloatTensor(projections).to(true_samples.device)
 		projections = F.normalize(projections, p=2, dim=1)
 
-		projected_true = projections @ true_samples
+		projected_true = projections @ true_samples  # 执行矩阵乘法，而不是逐元素的乘积
 		projected_fake = projections @ fake_samples
 
 		sorted_true, true_index = torch.sort(projected_true, dim=2)
@@ -781,35 +814,120 @@ class RainRobustLoss(torch.nn.Module):
 		self.temperature = temperature  # 0.25
 		self.criterion = torch.nn.CrossEntropyLoss()
 
-	def forward(self, features):
-		logits, labels = self.info_nce_loss(features)
+	def forward(self, features1, features2, names):
+		features = torch.cat((features1, features2), dim=0)
+		logits, labels = self.info_nce_loss(features, names)
 		return self.criterion(logits, labels)
 
-	def info_nce_loss(self, features):
-		labels = torch.cat([torch.arange(self.batch_size) for i in range(self.n_views)], dim=0)
+	def info_nce_loss(self, features, names):
+		
+		# 表示哪些是正例，哪些是负例, labels是
+		b = int(features.shape[0] // 2)
+		labels = torch.cat([torch.arange(b) for i in range(self.n_views)], dim=0)
 		labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
 		labels = labels.to(features.device)
 
 		features = F.normalize(features, dim=1) # 长度变成１
-
 		similarity_matrix = torch.matmul(features, features.T)
 
+		# mask表示哪些样本不加入计算，该阶段之后的labels和similarity_matrix是剔除不计算样本之后的
 		mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
-		labels = labels[~mask].view(labels.shape[0], -1)
-		# print('similarity_metrix: ', similarity_matrix.shape)  # 8*8
-		# print('mask: ', mask.shape)  # 16*16
+		labels = labels[~mask].view(labels.shape[0], -1)  # 16 * 15
 		similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+
 		positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
-
-		# select only the negatives the negatives
 		negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
-
 		logits = torch.cat([positives, negatives], dim=1)  
 		labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
 
 		logits = logits / self.temperature
 		return logits, labels
 
+
+class SingleRainRobustLoss(torch.nn.Module):
+	"""Rain Robust Loss"""
+	def __init__(self, batch_size, n_views, temperature=0.07):
+		super(SingleRainRobustLoss, self).__init__()
+		self.batch_size = batch_size
+		self.n_views = n_views
+		self.temperature = temperature  # 0.25
+		self.criterion = torch.nn.CrossEntropyLoss()
+
+	def forward(self, features1, features2, names):
+		features = torch.cat((features1, features2), dim=0)
+		logits, labels = self.info_nce_loss(features, names)
+		return self.criterion(logits, labels)
+
+	def info_nce_loss(self, features, names):
+		
+		# 表示哪些是正例，哪些是负例, labels是
+		b = int(features.shape[0] // 2)
+		labels = torch.cat([torch.arange(b) for i in range(self.n_views)], dim=0)
+		labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+		labels = labels.to(features.device)
+
+		features = F.normalize(features, dim=1) # 长度变成１
+		similarity_matrix = torch.matmul(features, features.T)
+
+		# mask表示哪些样本不加入计算，该阶段之后的labels和similarity_matrix是剔除不计算样本之后的
+		mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
+		labels = labels[~mask].view(labels.shape[0], -1)  # 16 * 15
+		similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+
+		positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+		negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
+		logits = torch.cat([positives, negatives], dim=1)  
+		labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
+
+		logits = logits / self.temperature
+		return logits, labels
+
+# 将derain作为anchor，将rainy-derain作为负例，将clean作为正例
+# 输入B*C*H*W的derain，rainy-derain，clean图片
+# 经过VGG编码之后获得feature，在feature上计算对比学习Loss
+class MyRainRobustLoss(torch.nn.Module):
+	"""Rain Robust Loss"""
+	def __init__(self, batch_size, n_views, temperature=0.07):
+		super(MyRainRobustLoss, self).__init__()
+		self.batch_size = batch_size
+		self.n_views = n_views
+		self.temperature = temperature  # 0.25
+		self.criterion = torch.nn.CrossEntropyLoss()
+
+		self.feature_encoder = VGG19()
+		for param in self.feature_encoder.parameters():
+			param.requires_grad = False
+		self.feature_encoder.eval()
+		self.l1 = nn.L1Loss()
+		self.weights = [1/4, 1/4, 1/2]
+		self.vgg_names = ['relu3_2', 'relu4_2', 'relu5_2']
+
+	def forward(self, anchor, negative, positive):
+		anchor_features = self.feature_encoder(anchor)
+		negative_features = self.feature_encoder(negative)
+		positive_features = self.feature_encoder(positive)
+		loss_total = 0
+		for i in range(len(self.vgg_names)):
+			loss = self.info_nce_loss(anchor_features[self.vgg_names[i]], negative_features[self.vgg_names[i]], positive_features[self.vgg_names[i]])
+			loss_total += self.weights[i] * loss
+		return loss_total
+
+	def info_nce_loss(self, anchor_feature, negative_feature, positive_feature):
+		
+		anchor_feature = F.normalize(anchor_feature, dim=1)
+		negative_feature = F.normalize(negative_feature, dim=1)
+		positive_feature = F.normalize(positive_feature, dim=1)
+
+		b = anchor_feature.shape[0]
+		anchor_feature = anchor_feature.reshape((b, -1))
+		negative_feature = negative_feature.reshape((b, -1))
+		positive_feature = positive_feature.reshape((b, -1))
+
+		positive_loss = self.l1(anchor_feature, positive_feature).mean()
+		negative_loss = self.l1(anchor_feature, negative_feature).mean()
+		loss = positive_loss / negative_loss
+		return loss
+		
 
 def rgb2gray(rgb):
   r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
@@ -1224,7 +1342,7 @@ def get_gaussian_kernel(sd, ksz=None):
     assert ksz % 2 == 1
     K = gauss_2d(ksz, sd, (0.0, 0.0), density=True)
     K = K / K.sum()
-    return K.unsqueeze(0), 
+    return K.unsqueeze(0), ksz
 
 def gauss_2d(sz, sigma, center, end_pad=(0, 0), density=False):
     """ Returns a 2-D Gaussian """
@@ -1369,3 +1487,57 @@ class SpatialColorAlignment(nn.Module):
         # pred_warped_m, valid = match_colors(frame_gt_ds, burst_0_warped, pred_warped, self.ksz, self.gauss_kernel)
 
         return pred_warped
+
+
+def get_local_weights(residual, ksize):
+
+    pad = (ksize - 1) // 2
+    residual_pad = F.pad(residual, pad=[pad, pad, pad, pad], mode='reflect')
+
+    unfolded_residual = residual_pad.unfold(2, ksize, 1).unfold(3, ksize, 1)
+    pixel_level_weight = torch.var(unfolded_residual, dim=(-1, -2), unbiased=True, keepdim=True).squeeze(-1).squeeze(-1)
+
+    return pixel_level_weight
+
+def get_refined_artifact_map(img_gt, img_output, img_ema, ksize):
+
+    residual_ema = torch.sum(torch.abs(img_gt - img_ema), 1, keepdim=True)
+    residual_SR = torch.sum(torch.abs(img_gt - img_output), 1, keepdim=True)  # 获取残差通道
+
+    patch_level_weight = torch.var(residual_SR.clone(), dim=(-1, -2, -3), keepdim=True) ** (1/5)  # 缩放系数，是一个数
+    pixel_level_weight = get_local_weights(residual_SR.clone(), ksize)  # 残差的方差表示
+    overall_weight = patch_level_weight * pixel_level_weight  # 缩放之后的 残差方差 表示
+
+    overall_weight[residual_SR < residual_ema] = 0
+
+    return overall_weight
+
+# pred的每个位置均和gt一个窗口的元素计算L1 Loss
+class MisalignToleratL1Loss(nn.Module):
+	""" Misalignment Tolerate L1 Loss"""
+	def __init__(self, kernel_size=7):
+		super().__init__()
+
+		self.l1loss = torch.nn.L1Loss()
+		self.kernel_size = kernel_size  # 窗口大小
+		self.unfold = nn.Unfold((self.kernel_size, self.kernel_size), padding=self.kernel_size//2, stride=1)
+		# 只能使用0进行padding操作
+
+	def forward(self, pred, gt):
+		b, c, h, w = pred.shape  # 得到pred的大小
+    	# 将gt拆分成kernel_size大小的窗口
+		unfold_gt = self.unfold(gt).reshape(b, c, -1, h * w)
+		pred = pred.reshape(b, c, 1, h * w)
+		loss = (pred - unfold_gt).abs().min(dim=2)[0]  # b * c * (h*w) 个最小值
+		loss = loss.reshape(b, -1)  # 转换成2维的
+		return torch.mean(loss, dim=1)
+
+class FFTLoss(nn.Module):
+	def __init__(self):
+		super(FFTLoss, self).__init__()
+		self.criterion = torch.nn.L1Loss()
+	
+	def forward(self, pred, target):
+		pred_fft = torch.fft.fft2(pred, dim=(-2, -1))
+		target_fft = torch.fft.fft2(target, dim=(-2, -1))
+		return self.criterion(pred_fft, target_fft)

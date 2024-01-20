@@ -141,13 +141,20 @@ def init_weights(net, init_type='normal', init_gain=0.02):
 
 
 def init_net(net, init_type='default', init_gain=0.02, gpu_ids=[]):
-	if len(gpu_ids) > 0:
-		assert(torch.cuda.is_available())
-		net.to(gpu_ids[0])
-		net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
-	if init_type != 'default' and init_type is not None:
-		init_weights(net, init_type, init_gain=init_gain)
-	return net
+  if len(gpu_ids) > 0:
+    assert(torch.cuda.is_available())
+    net.to(gpu_ids[0])
+    net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
+  if init_type != 'default' and init_type is not None:
+    init_weights(net, init_type, init_gain=init_gain)
+
+    # Zero for deform convs
+  key_name_list = ['offset', 'modulator']
+  for cur_name, parameters in net.named_parameters():
+    if any(key_name in cur_name for key_name in key_name_list):
+      nn.init.constant_(parameters, 0.)
+      
+  return net
 
 '''
 # ===================================
@@ -343,11 +350,83 @@ class Conv2d(torch.nn.Module):
 
   def forward(self, x):
     conv = self.conv(x)
-
     if self.activation_func is not None:
       return self.activation_func(conv)
     else:
       return conv
+
+class ModifyChannelWCA(torch.nn.Module):
+	"""Define a Resnet block with deformable convolutions"""
+
+	def __init__(
+		self, dim_in, dim_out, padding_type, 
+		norm_layer, use_dropout, 
+		use_bias, activation_func):
+
+		"""Initialize the deformable Resnet block
+		A defromable resnet block is a conv block with skip connections
+		"""
+		super(ModifyChannelWCA, self).__init__()
+		self.conv_block = self.build_conv_block(
+			dim_in, dim_out, padding_type, 
+			norm_layer, use_dropout, 
+			use_bias, activation_func)
+		self.ca = CALayer(channel=dim_out, reduction=8)
+		# self.sa = SpatialAttention()
+
+	def build_conv_block(
+		self, dim_in, dim_out, padding_type, 
+		norm_layer, use_dropout, 
+		use_bias, activation_func):
+		"""Construct a convolutional block.
+		Parameters:
+			dim (int) -- the number of channels in the conv layer.
+			padding_type (str) -- the name of padding layer: reflect | replicate | zero
+			norm_layer -- normalization layer
+			use_dropout (bool) -- if use dropout layers.
+			use_bias (bool) -- if the conv layer uses bias or not
+			activation_func (func) -- activation type
+		Returns a conv block (with a conv layer, a normalization layer, and a non-linearity layer)
+		"""
+		conv_block = []
+
+		p = 0
+		if padding_type == 'reflect':
+			conv_block += [nn.ReflectionPad2d(1)]
+		elif padding_type == 'replicate':
+			conv_block += [nn.ReplicationPad2d(1)]
+		elif padding_type == 'zero':
+			p = 1
+		else:
+			raise NotImplementedError('padding [%s] is not implemented' % padding_type)
+
+		conv_block += [
+			DeformableConv2d(dim_in, dim_out, kernel_size=3, padding=p, bias=use_bias), 
+			norm_layer(dim_out), 
+			activation_func]
+
+		if use_dropout:
+			conv_block += [nn.Dropout(0.5)]
+
+		p = 0
+		if padding_type == 'reflect':
+			conv_block += [nn.ReflectionPad2d(1)]
+		elif padding_type == 'replicate':
+			conv_block += [nn.ReplicationPad2d(1)]
+		elif padding_type == 'zero':
+			p = 1
+		else:
+			raise NotImplementedError('padding [%s] is not implemented' % padding_type)
+		conv_block += [DeformableConv2d(dim_out, dim_out, kernel_size=3, padding=p, bias=use_bias), norm_layer(dim_out)]
+
+		return nn.Sequential(*conv_block)
+
+	def forward(self, x):
+		"""Forward function (with skip connections)"""
+		outx = self.conv_block(x)
+		out = self.ca(outx)   # add skip connections
+		# out = x + self.conv_block(x)
+		return out
 
 class DeformableConv2d(nn.Module):
   '''
@@ -422,7 +501,6 @@ class DeformableConv2d(nn.Module):
         padding=self.padding,
         mask=modulator,
         stride=self.stride)
-
     return x
 
 class UpConv2d(torch.nn.Module):
@@ -494,6 +572,8 @@ class DeformableResnetBlock(nn.Module):
         dim, padding_type, 
         norm_layer, use_dropout, 
         use_bias, activation_func)
+    # self.ca = CALayer(channel=dim, reduction=8)
+    # self.sa = SpatialAttention()
 
   def build_conv_block(
     self, dim, padding_type, 
@@ -544,7 +624,9 @@ class DeformableResnetBlock(nn.Module):
 
   def forward(self, x):
     """Forward function (with skip connections)"""
-    out = x + self.conv_block(x)    # add skip connections
+    # outx = self.conv_block(x)
+    # out = x + self.ca(outx)   # add skip connections
+    out = x + self.conv_block(x)
     return out
 
 # 将DeformableResnetBlock中的可形变卷积操作替换成普通卷积
@@ -616,6 +698,43 @@ class ResnetBlock(nn.Module):
     out = x + self.conv_block(x)    # add skip connections
     return out
 
+# 对fea1执行下采样操作，并将fea2和下采样操作之后的fea1进行融合
+class DownsampleBlock(torch.nn.Module):
+    def __init__(
+            self, 
+            down_channels, 
+            in_channels, 
+            out_channels, 
+            activation_func=torch.nn.LeakyReLU(negative_slope=0.10, inplace=True),
+            norm_layer=nn.BatchNorm2d,
+            use_bias=False,
+            padding_type='reflect'):
+        super(DownsampleBlock, self).__init__()
+        self.downsample = Conv2d(
+          in_channels=down_channels,
+          out_channels=down_channels,
+          kernel_size=3,
+          stride=2,
+          padding_type=padding_type,
+          norm_layer=norm_layer,
+          activation_func=activation_func,
+          use_bias=use_bias)
+        fusion_channels = down_channels + in_channels
+        self.fusion = Conv2d(
+          fusion_channels,
+          out_channels,
+          kernel_size=3,
+          stride=1,
+          activation_func=activation_func,
+          padding_type=padding_type,
+          norm_layer=norm_layer,
+          use_bias=use_bias)
+    def forward(self, down_fea, in_fea):
+        down_feature = self.downsample(down_fea)
+        tmp_feature = torch.cat([down_feature, in_fea], dim=1)
+        out_feature = self.fusion(tmp_feature)
+        return out_feature
+    
 class DecoderBlock(torch.nn.Module):
   '''
   Decoder block with skip connections
@@ -685,9 +804,12 @@ class DecoderBlock(torch.nn.Module):
         use_bias=use_bias)
 
   def forward(self, x, skip=None):
-    deconv = self.deconv(x)
+    # 首先对x进行上采样,之后将x和skip连接,经过一个conv
+    deconv = self.deconv(x)  # 进行上采样
 
     if self.skip_channels > 0:
+      # print('deconv: ', deconv.shape)
+      # print('skip: ', skip.shape)
       concat = torch.cat([deconv, skip], dim=1)
     else:
       concat = deconv
@@ -813,11 +935,14 @@ class GuidedFilter(nn.Module):
         assert h_x > 2 * self.r + 1 and w_x > 2 * self.r + 1
 
         # N
+        # print('输入图像大小: ', x.data.shape, h_x, w_x)
+        # input = x.data.new().resize((1, 1, h_x, w_x))
+        # input = input.fill(1.0)
+        # print(x.shape, h_x, w_x)
         N = self.boxfilter(torch.tensor(x.data.new().resize_((1, 1, h_x, w_x)).fill_(1.0)))
-        # exit(0)
+        # N = self.boxfilter(torch.ones((1, 1, h_x, w_x)) * 1.0).to(x.device)
         # mean_x
         mean_x = self.boxfilter(x) / N
-        # exit(0)
         # mean_y
         mean_y = self.boxfilter(y) / N
         # cov_xy
@@ -831,9 +956,7 @@ class GuidedFilter(nn.Module):
         b = mean_y - A * mean_x
 
         # mean_A; mean_b
-        # exit(0)
         mean_A = self.boxfilter(A) / N
-        # exit(0)
         mean_b = self.boxfilter(b) / N
 
         return mean_A * x + mean_b
@@ -1361,3 +1484,132 @@ class Upsampler(nn.Sequential):
             raise NotImplementedError
 
         super(Upsampler, self).__init__(*m)
+
+
+class SpatialAttention(nn.Module):
+    def __init__(self, kernel_size=7):      # kernel_size可以换成3
+        super(SpatialAttention, self).__init__()
+
+        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=kernel_size//2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        out = torch.cat([avg_out, max_out], dim=1)
+        out = self.conv1(out)
+        return x * self.sigmoid(out)
+
+# channel attention
+class CALayer(nn.Module):
+    def __init__(self, channel, reduction=16): 
+        super(CALayer, self).__init__()
+        # global average pooling: feature --> point
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        # feature channel downscale and upscale --> channel weight
+        self.conv_du = nn.Sequential(
+                nn.Conv2d(channel, channel // reduction, 1, padding=0, bias=True),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(channel // reduction, channel, 1, padding=0, bias=True),
+                nn.Sigmoid()
+        )
+    def forward(self, x):
+        y = self.avg_pool(x)
+        y = self.conv_du(y)
+        return x * y
+
+
+def circular_random_drop_mask(w=256, h=256, SFM_center_radius_perc=-1, SFM_center_sigma_perc=0.05):
+    ''' 
+    (w,h) are the dimensions of the mask
+    
+    IF (SFM_center_radius_perc=-1)
+        the masked regions are selected randomly in circular shape, with the maximum at "radius"
+        when "radius" is 0, it is set to the max default value
+    
+    ELSE
+        the masked regions are always centered at "SFM_center_radius_perc*radius", and stretch inwards and 
+        outwards with a Gaussian probability, with sigma=SFM_center_sigma_perc*radius
+    '''
+    
+    radius = np.sqrt(w*w+h*h)
+    SFM_center_sigma = SFM_center_sigma_perc * radius
+    SFM_center_radius = SFM_center_radius_perc * radius
+    
+    X, Y = np.meshgrid(np.linspace( 0, h - 1, h), np.linspace( 0, w - 1, w))
+    D = np.sqrt(X * X + Y * Y)
+    
+    mask = np.ones((w,h))
+    mask[(D>a1)&(D<a2)] = 0  # 获取mask之后和图片乘积，即可得到mask之后的图片
+
+
+import torch
+import torch.nn.functional as F
+from copy import deepcopy
+
+
+class ALR(object):
+    def __init__(self, d_X, d_Y, lambda_lp, eps_min, eps_max, xi, ip, K):
+        super(ALR, self).__init__()
+        self.d_X = d_X
+        self.d_Y = d_Y
+        self.lambda_lp = lambda_lp
+        self.eps_min = eps_min
+        self.eps_max = eps_max
+        if eps_min == eps_max:
+            self.eps = lambda x: eps_min * torch.ones(x.size(0), 1, 1, 1, device=x.device)
+        else:
+            self.eps = lambda x: eps_min + (eps_max - eps_min) * torch.rand(x.size(0), 1, 1, 1, device=x.device)
+        self.xi = xi
+        self.ip = ip
+        self.K = K
+
+    def virtual_adversarial_direction(self, f, x):
+        batch_size = x.size(0)
+        f.zero_grad()
+        normalize = lambda vector: F.normalize(vector.view(batch_size, -1, 1, 1), p=2, dim=1).view_as(x)
+        d = torch.rand_like(x) - 0.5
+        d = normalize(d)
+        for _ in range(self.ip):
+            d.requires_grad_()
+            x_hat = torch.clamp(x + self.xi * d, min=-1, max=1)
+            y = f(x)
+            y_hat = f(x_hat)
+            y_diff = self.d_Y(y, y_hat)
+            y_diff = torch.mean(y_diff)
+            y_diff.backward()
+            d = normalize(d.grad).detach()
+            f.zero_grad()
+        r_adv = normalize(d) * self.eps(x)
+        r_adv[r_adv != r_adv] = 0
+        r_adv[r_adv == float("inf")] = 0
+        r_adv_mask = torch.clamp(
+            torch.lt(torch.norm(r_adv.view(batch_size, -1, 1, 1), p=2, dim=1, keepdim=True), self.eps_min).float()
+            +
+            torch.gt(torch.norm(r_adv.view(batch_size, -1, 1, 1), p=2, dim=1, keepdim=True), self.eps_max).float(),
+            min=0, max=1
+        ).expand_as(x)
+        r_adv = (1 - r_adv_mask) * r_adv + r_adv_mask * normalize(torch.rand_like(x) - 0.5)
+        return r_adv
+
+    def get_adversarial_perturbations(self, f, x):
+        r_adv = self.virtual_adversarial_direction(f=deepcopy(f), x=x.detach())
+        x_hat = x + r_adv
+        return x_hat
+
+    def get_alp_loss(self, x, x_hat, y, y_hat):
+        y_diff = self.d_Y(y, y_hat)
+        x_diff = self.d_X(x, x_hat)
+        nan_count = torch.sum(y_diff != y_diff).item()
+        inf_count = torch.sum(y_diff == float("inf")).item()
+        neg_count = torch.sum(y_diff < 0).item()
+        lip_ratio = y_diff / x_diff
+        alp = torch.clamp(lip_ratio - self.K, min=0)
+        nonzeros = torch.nonzero(alp)
+        alp_count = nonzeros.size(0)
+        alp_l1 = torch.mean(alp)
+        alp_l2 = torch.mean(alp ** 2)
+        alp_loss = self.lambda_lp * alp_l1
+        return (
+            alp_loss, lip_ratio, x_diff, y_diff, alp_l1, alp_l2, alp_count, nan_count, inf_count, neg_count
+        )
