@@ -9,6 +9,68 @@
 > **Abstract:** *Real-world image de-weathering aims at removing various undesirable weather-related artifacts. Owing to the impossibility of capturing image pairs concurrently, existing real-world de-weathering datasets often exhibit inconsistent illumination, position, and textures between the ground-truth images and the input degraded images, resulting in imperfect supervision. Such non-ideal supervision negatively affects the training process of learning-based de-weathering methods. In this work, we attempt to address the problem with a unified solution for various inconsistencies. Specifically, inspired by information bottleneck theory, we first develop a Consistent Label Constructor (CLC) to generate a pseudo-label as consistent as possible with the input degraded image while removing most weather-related degradations. In particular, multiple adjacent frames of the current input are also fed into CLC to enhance the pseudo-label. Then we combine the original imperfect labels and pseudo-labels to jointly supervise the de-weathering model by the proposed Information Allocation Strategy (IAS). During testing, only the de-weathering model is used for inference. Experiments on two real-world de-weathering datasets show that our method helps existing de-weathering models achieve better performance.* 
 <hr />
 
+## Setup
+
+### 1. Prepare Datasets
+<details>
+<summary><b>GT-Rain dataset</b></summary>
+Download the dataset from [here](https://drive.google.com/drive/folders/1NSRl954QPcGIgoyJa_VjQwh_gEaHWPb8).
+</details>
+
+<details>
+<summary><b>WeatherStream dataset</b></summary>
+Download the dataset from [here](https://drive.google.com/drive/folders/12Z9rBSTs0PPNHLieyU2vnCTzR6fOFLrT).
+</details>
+
+### 2. Download Weights
+The pretrained model of "Ours-RainRobust" trained using GT-Rain-Snow and WeatherStream can be downloaded from [url1](https://pan.baidu.com/s/1C2cSg6pfInEQOGMM4ro53w?pwd=rs5g) (提取码: rs5g) and [url2](https://pan.baidu.com/s/11zy7i6gtVd-ve-dMigM3vQ?pwd=mrut) (提取码: mrut), respectively.
+
+The final file tree likes:
+
+```none
+dataset
+├── WeatherStream
+├── ...
+code
+├── checkpoints
+    ├── GT-Rain-Snow
+        ├── UNET_model_20.pth
+    ├── WeatherStream
+        ├── UNET_model_20.pth
+├── imperfect-deweathering
+    ├── train.py
+    ├── test.py
+    ├── ...
+```
+
+## Inference
+Just run this command in ./scripts_eval/eval_unet1.sh:
+```bash
+echo "Start to test the model...."
+
+name="GT-Rain-Snow"  # or modify to WeatherStream
+device="0"  # GPU you used
+load_iter=20
+build_dir="../checkpoints/"$name"/test_epoch_"$load_iter
+
+if [ ! -d "$build_dir" ]; then
+        mkdir $build_dir
+fi
+
+LOG=$build_dir/`date +%Y-%m-%d-%H-%M-%S`.txt
+
+python test.py \
+    --test_dataset_size 'all'\
+    --input_frames 1\
+    --dataset_name MULGTWEA\
+    --model multiencgtrainselfsu\
+    --load_iter $load_iter\
+    --name $name\
+    --calc_metrics True\
+    --save_imgs True\  # you can modify it to False if you don't want to save images
+    --gpu_ids $device\
+    -j 4 | tee $LOG
+```
 ## Network Architecture
 
 <img src = "https://i.imgur.com/ILyYCuw.png"> 
