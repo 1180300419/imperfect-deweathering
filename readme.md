@@ -80,18 +80,6 @@ Experiments are conducted with Restormer and RainRobust networks on GT-Rain-Snow
 
 <img src = "https://i.imgur.com/2mheOWr.png"> 
 
-## Datasets
-
-<details>
-<summary><b>GT-Rain dataset</b></summary>
-Download the dataset from [here](https://drive.google.com/drive/folders/1NSRl954QPcGIgoyJa_VjQwh_gEaHWPb8).
-</details>
-
-<details>
-<summary><b>WeatherStream dataset</b></summary>
-Download the dataset from [here](https://drive.google.com/drive/folders/12Z9rBSTs0PPNHLieyU2vnCTzR6fOFLrT).
-</details>
-
 ## Visualizations
 
 ### Qualitative testing results of the de-weathering models trained with GT-Rain-Snow dataset.
