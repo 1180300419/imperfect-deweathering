@@ -23,7 +23,7 @@ Download the dataset from [here](https://drive.google.com/drive/folders/12Z9rBST
 </details>
 
 ### 2. Download Weights
-The pretrained model of "Ours-RainRobust" trained using GT-Rain-Snow and WeatherStream can be downloaded from [url1](https://pan.baidu.com/s/1C2cSg6pfInEQOGMM4ro53w?pwd=rs5g) (password:rs5g) and [url2](链接：https://pan.baidu.com/s/14ROb7g1NbPmaM2bBgmA0Vw?pwd=r3g1) (password:r3g1), respectively.
+The pretrained model of "Ours-RainRobust" trained using GT-Rain-Snow and WeatherStream can be downloaded from [url1](https://pan.baidu.com/s/1C2cSg6pfInEQOGMM4ro53w?pwd=rs5g) (password:rs5g) and [url2](https://pan.baidu.com/s/14ROb7g1NbPmaM2bBgmA0Vw?pwd=r3g1) (password:r3g1), respectively.
 
 The final file tree likes:
 
